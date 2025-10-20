@@ -1,0 +1,762 @@
+---
+title: "Data Preparation for Spatial Analysis"
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+    df_print: paged
+  pdf_document:
+    toc: yes
+---
+
+# Load and Clean Raw Statistics for each Unemployment Agency District (AB-Districts)
+
+This section details the initial data loading and cleaning process. The raw data originates from the Federal Institute for Vocational Education and Training (BIBB) and has been pre-processed into individual Excel files for each Agency District.
+
+## 🧹 Initial Setup
+
+It's good practice to start with a clean environment to prevent conflicts with existing objects.
+```{r}
+# Clear all objects from the current R session.
+rm(list = ls())
+```
+
+## 💾 Load and Combine Raw Datasets
+
+The following code block iterates through all prepared Excel files, reads them, selects the relevant columns, and combines them into a single comprehensive data frame. This is a time-intensive operation, so the resulting workspace is saved to an `.Rdata` file to allow for faster reloading in future sessions.
+
+```{r message=FALSE, warning=FALSE}
+# Load necessary libraries for data import and manipulation.
+library(readr)
+library(haven)
+library(readxl)
+library(stringr)
+
+# Create an empty data frame with a predefined structure to store the combined data.
+data_full <- data.frame(matrix(ncol = 7, nrow = 0))
+colnames(data_full) <- c("Code", "Profession", "NewContracts", "Applicants", "ApplicantsWithAlt", "OpenPositions", "ABName")
+
+# Identify all Excel files in the specified directory.
+files <- list.files(
+  path = "./Tables/Matching_Data/2023/",
+  pattern = "*.xlsx",
+  full.names = TRUE,
+  recursive = FALSE
+)
+
+# Loop through each file to load, process, and append its data.
+for (i in 1:length(files)) {
+  # Extract the Agency District name from the file path.
+  name <- str_split(files[i], "//")[[1]][2]
+  name <- str_split(name, ".xlsx")[[1]][1]
+
+  # Read the data from the current Excel file, skipping the header rows.
+  data_entry <- read_excel(
+    paste0("./Tables/Matching_Data/2023/", name, ".xlsx"),
+    col_types = c("text", "text", "text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric"),
+    skip = 3
+  )
+
+  # Select only the relevant columns.
+  data_entry <- data_entry[, c(1, 2, 5, 8, 11, 14)]
+  # Add the Agency District name as a new column.
+  data_entry$name <- name
+
+  # Assign standardized column names.
+  colnames(data_entry) <- c("Code", "Profession", "NewContracts", "Applicants", "ApplicantsWithAlt", "OpenPositions", "ABName")
+
+  # Append the processed data from this file to the main data frame.
+  data_full <- rbind(data_full, data_entry)
+}
+
+# Save the entire workspace to avoid re-running this slow process.
+save.image(file = "../DataBackups/after_loading.Rdata")
+```
+
+## 🔄 Reload Pre-processed Dataset
+
+This chunk allows for a quick start by loading the combined data frame that was saved in the previous step.
+```{r}
+# Clear the environment and load the saved data.
+rm(list = ls())
+load(file = "../DataBackups/after_loading.Rdata")
+
+# Assign a specific code '00' to the summary category "alle Berufe" (all professions).
+data_full$Code[data_full$Profession == "alle Berufe"] <- 00
+```
+
+## 📊 Generate Intermediate Statistics
+
+This section calculates summary statistics for each profession and translates the profession names from German to English for clarity in the final report.
+```{r}
+library(dplyr)
+
+# Create summary statistics for the publication.
+output_statistics_1 <- data_full %>%
+  filter(!is.na(Profession)) %>%
+  # Create a helper column to flag rows with any missing key variables.
+  mutate(incomplete = is.na(Applicants) | is.na(ApplicantsWithAlt) | is.na(OpenPositions) | is.na(NewContracts)) %>%
+  group_by(Profession) %>%
+  # Calculate various metrics like counts of missing values and totals for contracts, vacancies, and applicants.
+  summarise(
+    missingApplicants = sum(is.na(Applicants) | is.na(ApplicantsWithAlt)),
+    missingMatches = sum(is.na(NewContracts)),
+    incompleteRows = sum(incomplete),
+    Matches = sum(NewContracts, na.rm = TRUE),
+    missingVacancies = sum(is.na(OpenPositions)),
+    Vacancies = sum(OpenPositions, na.rm = TRUE) + sum(NewContracts, na.rm = TRUE),
+    Applicants = sum(Applicants, na.rm = TRUE) + sum(ApplicantsWithAlt, na.rm = TRUE) + sum(NewContracts, na.rm = TRUE)
+  ) %>%
+  # Order professions by the total number of new contracts.
+  arrange(-Matches) %>%
+  mutate(rank = floor(rank(-Matches) - 1))
+
+# Select and reorder columns for the formatted output table.
+output_statistics_formatted <- output_statistics_1[, c(1, 5, 7, 8, 4)]
+
+# Create a named vector to serve as a dictionary for translating German profession names to English.
+translations <- c(
+  "alle Berufe" = "all professions",
+  "Verkaufsberufe" = "sales professions",
+  "Maschinen- und Fahrzeugtechnikberufe" = "machine and vehicle technology professions",
+  "Mechatronik-, Energie- und Elektroberufe" = "mechatronics, energy, and electrical professions",
+  "Berufe in Unternehmensführung und -organisation" = "professions in business management and organization",
+  "Medizinische Gesundheitsberufe" = "medical health professions",
+  "Verkehrs- und Logistikberufe (außer Fahrzeugführung)" = "transport and logistics professions (except vehicle operation)",
+  "Informatik-, Informations- und Kommunikationstechnologieberufe" = "IT, information, and communication technology professions",
+  "Berufe in Finanzdienstleistungen, Rechnungswesen und Steuerberatung" = "professions in financial services, accounting, and tax consulting",
+  "Gebäude- und versorgungstechnische Berufe" = "building and supply technology professions",
+  "Tourismus-, Hotel- und Gaststättenberufe" = "tourism, hotel, and hospitality professions",
+  "Berufe in Recht und Verwaltung" = "professions in law and administration",
+  "Metallerzeugung und -bearbeitung, Metallbauberufe" = "metal production and processing, metal construction professions",
+  "Einkaufs-, Vertriebs- und Handelsberufe" = "purchasing, sales, and trade professions",
+  "(Innen-)Ausbauberufe" = "(interior) finishing professions",
+  "Lebensmittelherstellung und -verarbeitung" = "food production and processing",
+  "Nichtmedizinische Gesundheits-, Körperpflege- und Wellnessberufe, Medizintechnik" = "non-medical health, personal care, and wellness professions, medical technology",
+  "Hoch- und Tiefbauberufe" = "civil engineering and construction professions",
+  "Kunststoffherstellung und -verarbeitung, Holzbe- und -verarbeitung" = "plastic production and processing, wood processing",
+  "Land-, Tier- und Forstwirtschaftsberufe" = "agriculture, animal, and forestry professions",
+  "Technische Forschungs-, Entwicklungs-, Konstruktions- und Produktionssteuerungsberufe" = "technical research, development, design, and production control professions",
+  "nicht zugeordnete Berufe (incl. Berufe für Menschen mit Behinderung)" = "unclassified professions (incl. professions for people with disabilities)",
+  "Gartenbauberufe und Floristik" = "horticulture and floristry professions",
+  "Mathematik-, Biologie-, Chemie- und Physikberufe" = "mathematics, biology, chemistry, and physics professions",
+  "Führer/innen von Fahrzeug- und Transportgeräten" = "vehicle and transport equipment operators",
+  "Papier- und Druckberufe, technische Mediengestaltung" = "paper and printing professions, technical media design",
+  "Werbung, Marketing, kaufmännische und redaktionelle Medienberufe" = "advertising, marketing, commercial and editorial media professions",
+  "Schutz-, Sicherheits- und Überwachungsberufe" = "protection, security, and surveillance professions",
+  "Darstellende und unterhaltende Berufe" = "performing and entertaining professions",
+  "Produktdesign und kunsthandwerkliche Berufe, bildende Kunst, Musikinstrumentenbau" = "product design and craft professions, fine arts, musical instrument making",
+  "Bauplanungs-, Architektur- und Vermessungsberufe" = "construction planning, architecture, and surveying professions",
+  "Rohstoffgewinnung und -aufbereitung, Glas- und Keramikherstellung und -verarbeitung" = "raw material extraction and processing, glass and ceramics production and processing",
+  "Textil- und Lederberufe" = "textile and leather professions",
+  "Reinigungsberufe" = "cleaning professions",
+  "Geologie-, Geografie- und Umweltschutzberufe" = "geology, geography, and environmental protection professions",
+  "Erziehung, soziale und hauswirtschaftliche Berufe, Theologie" = "education, social and domestic professions, theology",
+  "Sprach-, literatur-, geistes-, gesellschafts- und wirtschaftswissenschaftliche Berufe" = "language, literature, humanities, social and economic sciences professions",
+  "Angehörige der regulären Streitkräfte" = "members of the regular armed forces",
+  "Lehrende und ausbildende Berufe" = "teaching and training professions"
+)
+
+# Apply the translations to the 'Profession' column in the summary table and the main data frame.
+output_statistics_formatted$Profession <- translations[output_statistics_formatted$Profession]
+data_full$Profession <- translations[data_full$Profession]
+```
+
+## 🛠️ Data Cleaning and Imputation
+
+This section handles missing data through linear imputation and filters the data to a subset of professions suitable for the main analysis.
+```{r}
+# --- Impute Missing Applicant Data ---
+# Calculate the ratio of 'Applicants' to 'ApplicantsWithAlt' for each profession.
+# This ratio will be used as a basis for linear imputation.
+quotas <- data_full %>%
+  group_by(Profession) %>%
+  filter(!is.na(Applicants) & !is.na(ApplicantsWithAlt)) %>%
+  summarize(
+    count = n(),
+    quote = sum(Applicants, na.rm = TRUE) / sum(ApplicantsWithAlt, na.rm = TRUE)
+  )
+
+# Merge these ratios back into the main data set.
+data_impute <- merge(data_full, quotas[, c(1, 3)], by = "Profession")
+
+# Split the data into three groups based on which applicant variable is missing.
+data_impute_split_1 <- data_impute %>% filter(is.na(Applicants) & !is.na(ApplicantsWithAlt))
+data_impute_split_2 <- data_impute %>% filter(!is.na(Applicants) & is.na(ApplicantsWithAlt))
+data_impute_split_3 <- data_impute %>% filter(!is.na(Applicants) & !is.na(ApplicantsWithAlt))
+
+# Impute the missing values using the calculated profession-specific ratios.
+data_impute_split_1$Applicants <- data_impute_split_1$ApplicantsWithAlt * data_impute_split_1$quote
+data_impute_split_1$missing <- "Applicants"
+
+data_impute_split_2$ApplicantsWithAlt <- data_impute_split_2$Applicants / data_impute_split_2$quote
+data_impute_split_2$missing <- "ApplicantsWithAlt"
+
+data_impute_split_3$missing <- "None"
+
+# Recombine the three data sets into one "relaxed" data frame where one of the two applicant columns was allowed to be missing.
+relaxed_data <- rbind(data_impute_split_1, data_impute_split_2, data_impute_split_3)
+relaxed_data$AllApplicants <- relaxed_data$Applicants + relaxed_data$ApplicantsWithAlt
+
+# --- Filter to Eligible Professions ---
+# Identify professions that are suitable for analysis based on two criteria:
+# 1. More than 10,000 total new contracts nationwide.
+# 2. Data is present in at least 75 districts (approx. 50% coverage).
+prof_full <- relaxed_data %>%
+  group_by(Profession) %>%
+  summarise(
+    n = n(),
+    matches = sum(NewContracts),
+    cover = sum(missing == "None")
+  ) %>%
+  filter(matches > 10000, cover > 74)
+
+# Create a classification code for professions.
+relaxed_data$KLDB <- paste0(relaxed_data$Code, "xxx")
+
+# Generate a final summary statistics table for the paper using the imputed data.
+statistics_paper <- relaxed_data %>%
+  group_by(Profession) %>%
+  summarise(
+    KLDB = first(KLDB),
+    Observations = n(),
+    Matches = mean(NewContracts, na.rm = TRUE),
+    Vacancies = mean(OpenPositions, na.rm = TRUE) + mean(NewContracts, na.rm = TRUE),
+    Unassigned = mean(AllApplicants, na.rm = TRUE) + mean(NewContracts, na.rm = TRUE)
+  ) %>%
+  arrange(-Matches) %>%
+  na.omit() %>%
+  slice(1:6)
+
+# Filter the main data frame to include only the eligible professions.
+data <- relaxed_data[relaxed_data$Profession %in% prof_full$Profession, ]
+
+# Store the names of the final professions for later use.
+professions <- unique(data$Profession)
+```
+
+## 📄 Create and Output LaTeX Table
+
+This chunk generates a LaTeX-formatted table of the summary statistics for direct inclusion in a research paper.
+```{r paged.print=FALSE}
+library(xtable)
+
+# Convert the summary data frame to an xtable object.
+xtable_data <- xtable(statistics_paper)
+
+# Print the xtable object to a .tex file.
+print(
+  xtable_data,
+  type = "latex",
+  file = "../Outputs/LaTeX/table1.tex",
+  include.rownames = FALSE,
+  sanitize.text.function = function(x) x,
+  hline.after = c(-1, 0, nrow(statistics_paper)) # Add horizontal lines for clarity.
+)
+```
+
+## 🗑️ Clean Up Workspace
+
+Remove intermediate objects to save memory and keep the environment tidy.
+```{r}
+rm(list = c(
+  "prof_full", "relaxed_data", "files", "name", "i", "quotas",
+  "output_statistics_1", "output_statistics_formatted", "data_impute_split_1",
+  "data_impute_split_2", "data_impute_split_3", "data_entry"
+))
+```
+
+# 🗺️ Load and Process Spatial Data
+
+This section loads the shapefile for the Agency Districts, merges it with the statistical data, and handles any spatial inconsistencies.
+
+## Load Shapefile Data
+The map data is provided by the German Federal Employment Agency. We use the version with 150 districts to match the statistical data.
+```{r}
+library(sf)
+
+# Read the shapefile containing the district geometries.
+districts <- sf::st_read("./Shapes/BA-Gebietsstrukturen/Deutschland_Agenturbezirke.shp")
+
+# Validate and repair polygon geometries to prevent errors in spatial operations.
+districts <- st_make_valid(districts)
+```
+
+## Merge Statistical and Spatial Data
+Here, we merge the two datasets. A key step is consolidating the three separate Berlin districts from the map data into a single entity to match the statistical data's format.
+```{r}
+library(sfheaders)
+library(ggplot2)
+library(stringr)
+
+# Manually correct a district name mismatch to ensure a successful merge.
+data <- data %>%
+  mutate(ABName = str_replace(ABName, "Schwäbisch Hall-Tauberbischofsh", "Schwäbisch Hall-Tauberbischofsheim"))
+
+# Identify any names that do not match between the two data sets.
+unmatched <- districts$region[!(districts$region %in% unique(data$ABName))]
+
+# --- Special Handling for Berlin ---
+# The map data has three districts for Berlin, while the statistical data has one.
+# The following steps merge the three Berlin polygons into a single unified geometry.
+
+# 1. Select the three Berlin polygons from the map data.
+Berlin_region <- districts[districts$region %in% unmatched, ]
+# 2. Union (merge) the three separate geometries into one.
+Berlin_geography <- st_union(Berlin_region$geometry[1], Berlin_region$geometry[2]) %>% st_union(Berlin_region$geometry[3])
+# 3. Create a new summary row for the unified Berlin district.
+Berlin_region <- Berlin_region %>%
+  group_by(parentID) %>%
+  summarise(
+    parentID = "901",
+    ID = "9XX",
+    region = "Berlin",
+    valid_from = first(valid_from),
+    valid_to = first(valid_to),
+    ID_DWH = "9XX",
+    parent_DWH = "900",
+    geometry = Berlin_geography
+  )
+
+# 4. Remove the old, separate Berlin districts from the map data.
+districts <- districts[!districts$region %in% unmatched, ]
+# 5. Add the new, unified Berlin district back to the map data.
+districts <- rbind(districts, Berlin_region)
+
+# Merge the spatial data with the statistical data using the district name as the key.
+data <- merge(districts, data, by.x = "region", by.y = "ABName")
+
+# Clean up intermediate objects.
+rm(list = c("unmatched", "Berlin_region", "Berlin_geography"))
+
+# Create a quick test plot to visually verify the merged data.
+ggplot() +
+  geom_sf(data = data[data$Profession == professions[1], ], aes(fill = NewContracts)) +
+  geom_sf(data = districts, fill = NA)
+```
+
+# 📈 Load and Prepare Regional Indicators
+
+This section loads supplementary regional indicators from INKAR and IÖR Monitor databases. The variables are renamed and rescaled for consistency.
+
+```{r}
+library(readr)
+
+# Load regional indicator data from INKAR.
+Tabelle_Kreise <- read_delim("./Tables/Regional_Indicators/SpatialRegression2022.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+Tabelle_Kreise_2 <- read_delim("./Tables/Regional_Indicators/SpatialRegression2022-extended.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+Tabelle_Kreise <- merge(Tabelle_Kreise, Tabelle_Kreise_2, by = c("Kennziffer"), no.dups = TRUE)
+
+# Rename and transform variables for clarity and consistent scaling.
+Tabelle_Kreise$unemp25 <- Tabelle_Kreise$`Arbeitslosenquote Jüngere`
+Tabelle_Kreise$bigCo <- Tabelle_Kreise$Großunternehmen
+Tabelle_Kreise$cohort <- (Tabelle_Kreise$`Einwohner von 18 bis unter 25 Jahren_2022` * Tabelle_Kreise$`Bevölkerung gesamt_2022`) / 100 / 1000
+Tabelle_Kreise$income <- Tabelle_Kreise$`Medianeinkommen anerkannter Berufsabschluss` * 12 / 1000
+Tabelle_Kreise$medCo <- Tabelle_Kreise$`Mittlere Unternehmen`
+Tabelle_Kreise$density <- Tabelle_Kreise$`Siedlungsdichte in km²` / 1000
+Tabelle_Kreise$cars <- Tabelle_Kreise$`Pkw-Dichte` / 10
+Tabelle_Kreise$shareVET <- Tabelle_Kreise$Auszubildende
+Tabelle_Kreise$shareUNI <- Tabelle_Kreise$`Studierende je 100 Einwohner 18 bis 25 Jahre`
+Tabelle_Kreise$medSE <- Tabelle_Kreise$`Schulabgänger mit mittlerem Abschluss`
+Tabelle_Kreise$lowSE <- Tabelle_Kreise$`Schulabgänger mit Hauptschulabschluss`
+Tabelle_Kreise$highSE <- Tabelle_Kreise$`Schulabgänger mit allgemeiner Hochschulreife`
+Tabelle_Kreise$cons <- Tabelle_Kreise$`Stimmenanteile CDU/CSU` + Tabelle_Kreise$`Stimmenanteile AfD`
+Tabelle_Kreise$gdp <- Tabelle_Kreise$`Bruttoinlandsprodukt je Erwerbstätigen`
+
+# Load additional urban indicators from the IÖR Monitor.
+urban_permeation <- read_delim("./Tables/Regional_Indicators/D03KG2010.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+traffic_infrastructure <- read_delim("./Tables/Regional_Indicators/V02RG2022.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+urban <- merge(urban_permeation, traffic_infrastructure)
+urban$urban_permeation <- urban$`Wert DSE/m²`
+urban$share_trafic <- urban$`Wert %`
+
+# Merge the urban indicators into the main indicator table.
+Tabelle_Kreise <- merge(Tabelle_Kreise, urban, by.x = "Kennziffer", by.y = "Gebietsschlüssel")
+
+# Clean up the environment.
+rm(list = c("urban_permeation", "traffic_infrastructure", "urban"))
+```
+
+## 🔗 Process Regional Delineations
+
+This chunk loads and merges a file that maps different regional coding schemes to ensure compatibility.
+```{r}
+library(readxl)
+
+# Load delineation file mapping different regional codes.
+krs_delineations <- read_excel("./Tables/Other/krs_delineations.xlsx", col_types = c("text", "text", "text", "text"))
+
+# Ensure the key 'kkz11' is a 5-character string with a leading zero if necessary.
+krs_delineations$kkz11 <- str_sub(paste0("0", krs_delineations$kkz11), -5)
+
+# Manually add a missing mapping for Göttingen, which was identified during checks.
+krs_delineations <- rbind(krs_delineations, c("8", "03159", "03159", "Göttingen"))
+
+# Remove duplicate entries, keeping only the first one for each key.
+krs_delineations <- krs_delineations %>%
+  group_by(kkz11) %>%
+  slice(1) %>%
+  ungroup()
+
+# Merge the delineation data with the main indicator table.
+Tabelle_Kreise <- merge(Tabelle_Kreise, krs_delineations, by.x = "Kennziffer", by.y = "kkz11")
+
+rm(list = c("krs_delineations"))
+```
+
+## 📍 Load City Geo-Locations
+
+The geo-locations of cities were pre-fetched from Wikidata. This section loads the data and converts it into a spatial object.
+```{r}
+# Load pre-fetched data for municipalities and cities.
+muncipalities <- read.csv("./Wikidata/muncipalities.csv")
+cities <- read.csv("./Wikidata/cities.csv")
+population_centres <- rbind(cities, muncipalities)
+
+# Coalesce different key and name columns into single, consistent columns.
+population_centres$key <- population_centres$regioKey
+population_centres$key[is.na(population_centres$regioKey)] <- population_centres$regiokeyCity[is.na(population_centres$regioKey)]
+population_centres$districtName <- population_centres$districtLabel
+population_centres$districtName[population_centres$districtName == ""] <- population_centres$cityLabel[population_centres$districtName == ""]
+rm(list = c("muncipalities", "cities"))
+
+# The location is stored as a string "Point(longitude latitude)". The following lines parse this string.
+population_centres$longitude <- as.numeric(lapply(strsplit(population_centres$maxLoc, " "), function(x) {
+  return(gsub("[()]", "", gsub("Point", "", x[1])))
+}))
+population_centres$latitude <- as.numeric(lapply(strsplit(population_centres$maxLoc, " "), function(x) {
+  return(gsub(")", "", x[2]))
+}))
+
+# Convert the data frame to a spatial 'sf' object.
+population_centres <- st_as_sf(population_centres, coords = c("longitude", "latitude"), crs = 4326)
+```
+
+# 🏙️ Assign Cities to Districts and Calculate Distances
+
+This section performs spatial operations to assign each city to its corresponding Agency District and then calculates the distances between a representative subset of these cities.
+
+## Assign Cities to Districts via Spatial Join
+
+A point-in-polygon operation is used to determine which district each city falls into.
+```{r}
+# Ensure both spatial data sets use the same Coordinate Reference System (CRS).
+
+# Set same CRS for comparison
+population_centres$ABDistrict <- ""
+population_centres <- st_transform(population_centres, "WGS84")
+districts <- st_transform(districts, "WGS84")
+
+
+for (i in 1:nrow(districts))
+{
+  population_centres$ABDistrict[st_within(
+    population_centres$geometry,
+    districts$geometry[i],
+    sparse = FALSE,
+    prepared = TRUE
+  )] <- districts$region[i]
+}
+
+population_centres[population_centres$city == "http://www.wikidata.org/entity/Q522272", ]$ABDistrict <-
+  "Kempten-Memmingen"
+population_centres[population_centres$city == "http://www.wikidata.org/entity/Q662505", ]$ABDistrict <-
+  "Saarland"
+
+
+select <-
+  population_centres %>% group_by(ABDistrict)  %>% mutate(all = sum(maxPopulation),
+                                                          ran = rank(-maxPopulation)) %>% mutate(n = n()) %>% arrange(n)
+
+### Extract all Cities, such that every district is covered by at least 50% of population
+final <- select[select$ran == 1, ]
+curr_rank <- 2
+names <- c("")
+value <- 0
+# Iteratively add the next-largest cities for districts that are still below the 50% population threshold.
+while ((value < 0.5) & (curr_rank < 6)) {
+  test <- final %>%
+    group_by(ABDistrict) %>%
+    mutate(all2 = sum(maxPopulation), share = all2 / all)
+  value <- min(test$share)
+  
+  # Identify districts still below the threshold.
+  smaller_names <- unique(test$ABDistrict[test$share < 0.5])
+  # Add the next-rank cities for only those districts.
+  add <- select %>% filter(ran == curr_rank & ABDistrict %in% smaller_names)
+  final <- rbind(final, add)
+  curr_rank <- curr_rank + 1
+}
+rm(list = c("add", "value", "curr_rank", "smaller_names", "test"))
+```
+
+## Calculate Distances Between Cities
+```{r}
+library(tidyr)
+library(sf)
+library(dplyr)
+library(data.table)
+
+# Create a Cartesian product of the selected cities to get all possible city pairs.
+distances <- crossing(final[, c("city", "geometry", "ABDistrict")], final[, c("city", "geometry", "ABDistrict")], .name_repair = "unique")
+
+# Calculate the geographical distance (in meters) for each pair.
+distances$dist <- as.numeric(st_distance(distances$geometry...2, distances$geometry...5, by_element = TRUE))
+```
+
+## Filter to a Relevant Subset of Distances
+
+To make the distance matrix manageable, it is filtered to include only pairs that are either geographically close (<50km) or located in adjacent districts.
+```{r}
+library(ggplot2)
+library(sf)
+library(spdep)
+
+# First filter: keep all pairs where the distance is less than 50km.
+distances_relevant <- distances[as.numeric(distances$dist) < 50000, ]
+
+# Second filter: identify adjacent districts and keep all city pairs between them.
+# 1. Create a spatial adjacency matrix for the AB-Districts.
+W_adj <- poly2nb(districts) %>% nb2mat(style = "B", zero.policy = TRUE)
+row.names(W_adj) <- districts$region
+colnames(W_adj) <- districts$region
+
+# 2. Loop through the adjacency matrix to find neighbors and add the corresponding city pairs.
+for (i in 1:nrow(W_adj)) {
+  target <- rownames(W_adj)[i]
+  adj <- colnames(W_adj)[W_adj[i, ] == 1]
+  subset <- distances[distances$ABDistrict...3 == target & distances$ABDistrict...6 %in% adj, ]
+  distances_relevant <- rbind(distances_relevant, subset)
+}
+
+# Clean up the final set of distances.
+distances_relevant <- distinct(distances_relevant) # Remove duplicates.
+distances_relevant <- distances_relevant[distances_relevant$city...1 != distances_relevant$city...4, ] # Remove self-to-self pairs.
+rm(list = c("target", "adj", "i"))
+```
+
+# 🚗 Load and Process Commuter Flow Data
+```{r warning=FALSE}
+library(readr)
+library(dplyr)
+
+# --- Process Outbound Commuter Data ---
+directory <- "./Tables/Commuting_Data/Auspendler"
+file_list <- list.files(path = directory, pattern = "*.csv", full.names = TRUE)
+
+# Define column types to prevent parsing errors.
+col_types <- cols(
+  col_character(), col_character(), col_character(), col_character(),
+  col_integer(), col_integer(), col_integer(), col_integer(), col_integer(), col_integer()
+)
+
+# Efficiently read and combine all CSV files.
+Outbound_Commuters_Raw <- lapply(file_list, function(file) {
+  read_delim(file, delim = ";", escape_double = FALSE, trim_ws = TRUE, skip = 11, col_types = col_types)
+}) %>% bind_rows()
+
+# Clean the raw data by removing header/footer rows and summary rows.
+commuters_outbound <- Outbound_Commuters_Raw %>%
+  filter(Wohnort != "Exportdatum:") %>%
+  filter(!is.na(Regionalschlüssel...2)) %>%
+  filter(!grepl("gesamt", Arbeitsort, ignore.case = TRUE)) %>%
+  filter(!grepl("xx", Regionalschlüssel...4, ignore.case = TRUE))
+
+# --- Process Inbound Commuter Data (repeating the same process) ---
+directory <- "./Tables/Commuting_Data/Einpendler"
+file_list <- list.files(path = directory, pattern = "*.csv", full.names = TRUE)
+
+Inbound_Commuters_Raw <- lapply(file_list, function(file) {
+  read_delim(file, delim = ";", escape_double = FALSE, trim_ws = TRUE, skip = 11, col_types = col_types)
+}) %>% bind_rows()
+
+commuters_inbound <- Inbound_Commuters_Raw %>%
+  filter(Wohnort != "Exportdatum:") %>%
+  filter(!is.na(Regionalschlüssel...2)) %>%
+  filter(!grepl("gesamt", Arbeitsort, ignore.case = TRUE)) %>%
+  filter(!grepl("xx", Regionalschlüssel...4, ignore.case = TRUE))
+```
+
+# 📊 Final Visualizations
+
+This section creates the final plots and maps for the analysis, including a map of applicant deficits and a scatter plot of unemployment versus vacancy rates.
+
+## Prepare Data for Connection Map
+```{r fig.height=16, fig.width=12}
+library(tidyr)
+library(purrr)
+library(sf)
+library(ggplot2)
+
+# --- Prepare data to draw lines connecting nearby cities ---
+# Select pairs with a distance < 50km and rank < 5 (up to 4 nearest neighbors).
+d_test <- distances_relevant %>%
+  group_by(city...1) %>%
+  mutate(rank_e = rank(dist)) %>%
+  filter(rank_e < 5 & dist < 50000)
+
+# Extract start and end coordinates for each line.
+d_mat1 <- as.data.frame(cbind(unlist(map(d_test$geometry...2, 1)), unlist(map(d_test$geometry...2, 2))))
+d_mat2 <- as.data.frame(cbind(unlist(map(d_test$geometry...5, 1)), unlist(map(d_test$geometry...5, 2))))
+
+# Combine and format the coordinates for line creation.
+d_mat1$num <- 1
+d_mat2$num <- 2
+d_mat1$id <- 1:nrow(d_mat1)
+d_mat2$id <- 1:nrow(d_mat2)
+d_mat <- rbind(d_mat1, d_mat2)
+setorder(d_mat, id, num)
+
+# Create an 'sf' object with LINESTRING geometries.
+connection_sf <- sfheaders::sf_linestring(obj = d_mat, x = "V1", y = "V2", linestring_id = "id", keep = TRUE)
+st_crs(connection_sf) <- "WGS84"
+
+# Clean up intermediate objects.
+rm(list = c("d_mat1", "d_mat2", "d_test", "d_mat"))
+
+# Create a categorical variable for city population size for better plotting.
+final$shape <- "< 50 000"
+final$shape[final$maxPopulation > 50000] <- "50 000 - 99 999"
+final$shape[final$maxPopulation > 100000] <- "100 000 - 199 999"
+final$shape[final$maxPopulation > 200000] <- "200 000 - 499 999"
+final$shape[final$maxPopulation > 500000] <- "> 500 000"
+final$shape <- factor(final$shape, levels = c("< 50 000", "50 000 - 99 999", "100 000 - 199 999", "200 000 - 499 999", "> 500 000"))
+
+# Create a test map showing cities and connections.
+map_cities <- ggplot() +
+  geom_sf(data = districts, aes(fill = parent_DWH), alpha = 0.1) +
+  geom_sf(data = connection_sf, color = "#96c11f") +
+  geom_sf(data = final, color = "#003268", size = 2, shape = 20) +
+  guides(fill = "none")
+
+map_cities
+```
+
+## Create Applicant Deficit Map for Publication
+```{r fig.height=16, fig.width=12}
+library(ggnewscale)
+
+# Define a custom color palette for the map's fill gradient.
+custom_colors <- function(n) {
+  colors <- c("#006ce3", "#508db9", "#b0b093", "#e7c58c", "#ffe4b5")
+  colorRampPalette(colors)(n)
+}
+
+# Create the final map for the publication.
+map_deficit <- ggplot() +
+  # Layer 1: AB-District polygons, colored by the applicant deficit.
+  geom_sf(data = data[data$Profession == professions[1], ], aes(fill = (OpenPositions - AllApplicants) / NewContracts)) +
+  # Layer 2: City points, with shape determined by population.
+  geom_sf(data = final, aes(shape = shape), colour = "#000000", size = 1) +
+  # Manually define the shapes to be used for different population sizes.
+  scale_shape_manual(values = c("< 50 000" = 4, "50 000 - 99 999" = 1, "100 000 - 199 999" = 0, "200 000 - 499 999" = 16, "> 500 000" = 15)) +
+  # Set labels for the legends.
+  labs(shape = "Population ", fill = "Applicant Deficit") +
+  # Customize the guides (legends).
+  guides(
+    fill = guide_colorbar(direction = "vertical", title.position = "left"),
+    shape = guide_legend(nrow = 5, byrow = TRUE)
+  ) +
+  theme_bw() +
+  # Further customize theme elements for a publication-ready look.
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 11, face = "bold"),
+    legend.key.size = unit(0.5, "cm"),
+    legend.box = "horizontal",
+    legend.box.just = "center",
+    legend.spacing.x = unit(0.5, "cm"),
+    axis.title = element_text(size = 10, face = "bold"),
+    axis.text = element_text(size = 10)
+  ) +
+  # Apply the custom color gradient.
+  scale_fill_gradientn(colors = custom_colors(100), na.value = "#d4d4d4")
+
+map_deficit
+
+# Save the map to a high-resolution file.
+ggsave(
+  filename = "../Outputs/Figures/map_deficit.png",
+  plot = map_deficit,
+  width = 16,
+  height = 25,
+  units = "cm",
+  dpi = 900
+)
+```
+
+## Create Unemployment vs. Vacancy Rate Plot
+```{r fig.height=8, fig.width=6}
+# Filter out NA values and observations where key metrics are zero.
+df_filtered <- na.omit(data[!(data$AllApplicants == 0 | data$OpenPositions == 0 | data$NewContracts == 0), ])
+
+# Define a custom color palette for the professions.
+custom_disc_color <- c("#4b0082", "#0056a0", "#1e7d32", "#ec7063", "#fda06b", "#ffd4a5")
+
+# Create a scatter plot similar to a Beveridge Curve.
+profession_inverse <- ggplot(data = df_filtered, aes(x = AllApplicants / (NewContracts + AllApplicants), y = OpenPositions / (NewContracts + OpenPositions), color = Profession)) +
+  geom_point(alpha = 0.4, shape = 16) +
+  # Add a smoothed line using a specific formula.
+  stat_smooth(method = "lm", formula = y ~ I(1 / x)) +
+  xlim(c(0, 0.3)) + ylim(c(0, 0.3)) +
+  labs(x = "Unemployment Rate", y = "Vacancy Rate") +
+  theme_bw() +
+  theme(
+    legend.text = element_text(size = 7),
+    legend.title = element_text(size = 8, face = "bold"),
+    legend.box = "horizontal",
+    legend.box.just = "center",
+    legend.spacing.x = unit(0.2, "cm"),
+    axis.title = element_text(size = 8, face = "bold"),
+    axis.text = element_text(size = 8)
+  ) +
+  guides(color = guide_legend(ncol = 1)) +
+  scale_color_manual(values = custom_disc_color)
+
+profession_inverse
+
+# Save the plot to a high-resolution file.
+ggsave(
+  filename = "../Outputs/Figures/profession_inverse.png",
+  plot = profession_inverse,
+  width = 16,
+  height = 8,
+  units = "cm",
+  dpi = 900
+)
+```
+
+# 💾 Save Final Workspace and Prepare for Next Steps
+
+## Save Intermediate Data
+Save the final, fully processed workspace for use in the modeling stage.
+```{r}
+# Clean up large, raw data objects that are no longer needed.
+rm(list = c(
+  "distances", "data_full", "map_AB_districts", "germany",
+  "Inbound_Commuters_Raw", "Outbound_Commuters_Raw",
+  "file_list", "directory", "translations", "col_types"
+))
+save.image(file = "../DataBackups/newest_prepared_data.Rdata")
+```
+
+## Prepare for Google Maps API Query
+Commuting/driving times are queried via a separate script. This chunk prepares the necessary data by identifying only the *new* city pairs that need to be queried since the last run. This avoids expensive re-runs of the API queries.
+```{r}
+# Load the current and previous sets of final cities for comparison.
+final_2023 <- final
+load("../DataBackups/2022_cities.RData")
+final_2022 <- final
+
+# Identify which cities are new in the 2023 list.
+missing <- final_2023[!final_2023$city %in% final_2022$city, c(1)]
+
+# Filter the list of relevant distances to include only pairs involving a new city.
+distances_missing <- distances_relevant[(distances_relevant$city...1 %in% missing$city) | (distances_relevant$city...4 %in% missing$city), ]
+
+# Overwrite the 'distances_relevant' object to contain only the new pairs.
+distances_relevant <- distances_missing
+```

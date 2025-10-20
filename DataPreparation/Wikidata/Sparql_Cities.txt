@@ -1,0 +1,80 @@
+# BIGGEST CITIES IN GERMANY
+
+# Quality Control:
+
+# Results are Tested for Uniqueness: Every listed City has a unique rural district or is a urban district together with the district identifier
+# For 8 cities differnt listing in population and location were set to the maximal reportet value
+
+# All cities of https://de.wikipedia.org/wiki/Liste_der_kleinsten_St%C3%A4dte_in_Deutschland_nach_Einwohnerzahl are included in the Dataset.
+# No entries with small population in the computed dataset exist, that are not part of https://de.wikipedia.org/wiki/Liste_der_kleinsten_St%C3%A4dte_in_Deutschland_nach_Einwohnerzahl.
+
+# Finally a full comparison to https://de.wikipedia.org/wiki/Liste_der_St%C3%A4dte_in_Deutschland was conducted. These are the Same Cities on Both datasets.
+
+
+SELECT DISTINCT ?city ?cityLabel ?district ?districtLabel ?isCity ?isIndependentCity ?regiokeyCity ?regioKey (MAX(?population) AS ?maxPopulation) (MAX(?loc) AS ?maxLoc) WHERE {
+  
+  {?city wdt:P31/wdt:P279* wd:Q515. FILTER (?city != wd:Q16799 && ?city != wd:Q565513 && ?city != wd:Q33492620 && ?city != wd:Q552508)} # Cities, that are Cities except some missclassifications
+  
+  # Construct Base Entities for further Queries
+  UNION {?city wdt:P31 wd:Q3957.
+                                  FILTER ( ?city = wd:Q22950 || ?city = wd:Q32752658 || 
+                                         ?city =  wd:Q22867 || ?city = wd:Q148091 || ?city =  wd:Q541832 ||?city =  wd:Q32041291 )} #Cities that are counted as Towns and not cities
+  UNION {?city wdt:P31 wd:Q262166. FILTER (?city = wd:Q61733)}  #Add Tamm
+  UNION {?city wdt:P31 wd:Q15974307. FILTER (?city = wd:Q14892)} # Add Buchholz in der Nordheide 
+ 
+  # Get Relevant Information for the Base Entries
+  ?city wdt:P1082 ?population .
+  ?city wdt:P17 wd:Q183 .
+  ?city wdt:P625 ?loc .
+  
+  # If city has a Regional Key, it is an Independet city. Add also the key
+  OPTIONAL{?city wdt:P440 ?regiokeyCity}
+  BIND(EXISTS{?city wdt:P440 ?regiokeyCity} AS ?isIndependentCity).
+  BIND(TRUE AS ?isCity)
+  # If city is part of a rural distirc,t add that information
+  OPTIONAL {?city wdt:P131* ?district. #One relation ist not enough, as Cities for Konstanz have a subdevision
+  ?district wdt:P31/wdt:P279* wd:Q106658.
+  FILTER NOT EXISTS {?district wdt:P576 ?rel.}
+  OPTIONAL {?district wdt:P440 ?regioKey}
+  }
+  
+  MINUS #Remove former cities (medieval times) which are part of a vilages
+  {
+  ?city wdt:P31/wdt:P279* wd:Q515.
+  ?city wdt:P17 wd:Q183 .
+  ?city wdt:P31/wdt:P279*  wd:Q253019.
+  FILTER (?city != wd:Q14833 && ?city != wd:Q157035) # Exception for Heinsberg, Bückeburg
+  }
+  MINUS #Remove former cities which are part of a bigger city as set of quarters
+  {
+  ?city wdt:P31/wdt:P279* wd:Q515.
+  ?city wdt:P17 wd:Q183 .
+  ?city wdt:P31/wdt:P279*  wd:Q2740635.
+  }
+  MINUS #Remove former cities which are part of a bigger city as quarter
+  {
+  ?city wdt:P31/wdt:P279* wd:Q515.
+  ?city wdt:P17 wd:Q183 .
+  ?city wdt:P31 wd:Q2983893.
+  }
+  MINUS #Remove administration centeres, that are not cities but listed as such by inheritence
+  {
+  ?city wdt:P31/wdt:P279* wd:Q515.
+  ?city wdt:P17 wd:Q183 .
+  ?city wdt:P31 wd:Q262166
+  FILTER (?city != wd:Q61733) # Exception for Tamm
+  }
+  MINUS #Remove parts of admistration centeres
+  {
+  ?city wdt:P31/wdt:P279* wd:Q515.
+  ?city wdt:P17 wd:Q183 .
+  ?city wdt:P131 ?district2.
+  ?district2 wdt:P31 wd:Q262166
+  }
+    SERVICE wikibase:label {
+    bd:serviceParam wikibase:language "de" .
+  }
+  FILTER (?city != wd:Q1209) # Exclude the State of Bremen, cause it was formerly a city.
+  FILTER ((?city != wd:Q502780) || ((?city = wd:Q502780) &&  (?district = wd:Q8518))) # Exclude an entry of a Lordship, introduced by multiple relations of P131*
+}
+GROUP BY ?city ?cityLabel ?district ?districtLabel ?isCity ?isIndependentCity ?regiokeyCity ?regioKey  

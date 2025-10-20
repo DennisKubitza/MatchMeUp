@@ -1,0 +1,403 @@
+﻿lfd. Nr.;Gebietsschlüssel;Gebietsname;Wert DSE/m²
+1;07131;Ahrweiler;3.88 
+2;09771;Aichach-Friedberg;3.74 
+3;08425;Alb-Donau-Kreis;3.29 
+4;16077;Altenburger Land;4.93 
+5;07132;Altenkirchen (Westerwald);5.37 
+6;15081;Altmarkkreis Salzwedel;1.64 
+7;09171;Altötting;5.01 
+8;07331;Alzey-Worms;3.78 
+9;09361;Amberg;14.40 
+10;09371;Amberg-Sulzbach;2.53 
+11;03451;Ammerland;6.03 
+12;15082;Anhalt-Bitterfeld;3.58 
+13;09561;Ansbach;8.65 
+14;09571;Ansbach (Landkreis);2.75 
+15;09661;Aschaffenburg;15.62 
+16;09671;Aschaffenburg (Landkreis);4.77 
+17;09761;Augsburg;18.55 
+18;09772;Augsburg (Landkreis);4.97 
+19;03452;Aurich;4.98 
+20;07332;Bad Dürkheim;3.98 
+21;09672;Bad Kissingen;2.49 
+22;07133;Bad Kreuznach;3.91 
+23;09173;Bad Tölz-Wolfratshausen;2.25 
+24;08211;Baden-Baden;5.78 
+25;09461;Bamberg;19.27 
+26;09471;Bamberg (Landkreis);2.82 
+27;12060;Barnim;3.97 
+28;14625;Bautzen;4.01 
+29;09462;Bayreuth;16.69 
+30;09472;Bayreuth (Landkreis);2.45 
+31;09172;Berchtesgadener Land;2.48 
+32;06431;Bergstraße;6.26 
+33;11000;Berlin;28.63 
+34;07231;Bernkastel-Wittlich;2.59 
+35;08426;Biberach;3.52 
+36;05711;Bielefeld;18.04 
+37;07134;Birkenfeld;3.15 
+38;05911;Bochum;28.85 
+39;08435;Bodenseekreis;5.31 
+40;05314;Bonn;21.99 
+41;05554;Borken;5.86 
+42;05512;Bottrop;16.77 
+43;12051;Brandenburg an der Havel;7.44 
+44;03101;Braunschweig;17.41 
+45;08315;Breisgau-Hochschwarzwald;3.24 
+46;04011;Bremen;24.80 
+47;04012;Bremerhaven;21.05 
+48;15084;Burgenlandkreis;3.95 
+49;08115;Böblingen;7.53 
+50;15083;Börde;2.38 
+51;08235;Calw;3.66 
+52;03351;Celle;3.30 
+53;09372;Cham;3.03 
+54;14511;Chemnitz;17.14 
+55;03453;Cloppenburg;4.41 
+56;09463;Coburg;17.02 
+57;09473;Coburg (Landkreis);4.06 
+58;07135;Cochem-Zell;2.43 
+59;05558;Coesfeld;4.48 
+60;12052;Cottbus;14.49 
+61;03352;Cuxhaven;3.50 
+62;09174;Dachau;4.67 
+63;12061;Dahme-Spreewald;2.67 
+64;06411;Darmstadt;13.72 
+65;06432;Darmstadt-Dieburg;6.52 
+66;09271;Deggendorf;4.05 
+67;03401;Delmenhorst;21.77 
+68;15001;Dessau-Roßlau;6.57 
+69;03251;Diepholz;3.91 
+70;09773;Dillingen a.d. Donau;3.38 
+71;09279;Dingolfing-Landau;3.67 
+72;01051;Dithmarschen;3.47 
+73;09779;Donau-Ries;3.04 
+74;07333;Donnersbergkreis;2.87 
+75;05913;Dortmund;24.08 
+76;14612;Dresden;17.94 
+77;05112;Duisburg;24.78 
+78;05358;Düren;5.46 
+79;05111;Düsseldorf;23.62 
+80;09175;Ebersberg;4.25 
+81;16061;Eichsfeld;2.38 
+82;09176;Eichstätt;2.45 
+83;07232;Eifelkreis Bitburg-Prüm;2.26 
+84;16056;Eisenach;6.64 
+85;12062;Elbe-Elster;2.70 
+86;03402;Emden;11.87 
+87;08316;Emmendingen;3.63 
+88;03454;Emsland;3.96 
+89;05954;Ennepe-Ruhr-Kreis;12.59 
+90;08236;Enzkreis;5.43 
+91;09177;Erding;3.92 
+92;16051;Erfurt;10.08 
+93;09562;Erlangen;16.17 
+94;09572;Erlangen-Höchstadt;4.41 
+95;14521;Erzgebirgskreis;4.80 
+96;05113;Essen;27.89 
+97;08116;Esslingen;9.25 
+98;05366;Euskirchen;3.95 
+99;01001;Flensburg;21.17 
+100;09474;Forchheim;3.90 
+101;07311;Frankenthal (Pfalz);13.69 
+102;12053;Frankfurt (Oder);8.28 
+103;06412;Frankfurt am Main;21.42 
+104;08311;Freiburg im Breisgau;12.12 
+105;09178;Freising;4.28 
+106;08237;Freudenstadt;2.81 
+107;09272;Freyung-Grafenau;2.81 
+108;03455;Friesland;5.30 
+109;06631;Fulda;3.87 
+110;09179;Fürstenfeldbruck;6.86 
+111;09563;Fürth;19.54 
+112;09573;Fürth (Landkreis);5.97 
+113;09180;Garmisch-Partenkirchen;1.62 
+114;05513;Gelsenkirchen;28.96 
+115;16052;Gera;9.91 
+116;07334;Germersheim;5.26 
+117;06531;Gießen;5.32 
+118;03151;Gifhorn;2.78 
+119;03153;Goslar;3.42 
+120;16067;Gotha;3.59 
+121;03456;Grafschaft Bentheim;4.37 
+122;16076;Greiz;4.73 
+123;06433;Groß-Gerau;8.13 
+124;08117;Göppingen;5.75 
+125;14626;Görlitz;4.10 
+126;03159;Göttingen;3.78 
+127;09774;Günzburg;4.24 
+128;05754;Gütersloh;8.51 
+129;05914;Hagen;14.75 
+130;15002;Halle (Saale);19.59 
+131;02000;Hamburg;24.81 
+132;03252;Hameln-Pyrmont;4.46 
+133;05915;Hamm;13.00 
+134;03353;Harburg;5.23 
+135;15085;Harz;2.59 
+136;12063;Havelland;3.10 
+137;09674;Haßberge;2.49 
+138;03358;Heidekreis;2.72 
+139;08221;Heidelberg;13.46 
+140;08135;Heidenheim;4.10 
+141;08121;Heilbronn;14.16 
+142;08125;Heilbronn (Landkreis);5.11 
+143;05370;Heinsberg;8.52 
+144;03154;Helmstedt;3.55 
+145;05758;Herford;13.60 
+146;05916;Herne;32.41 
+147;06632;Hersfeld-Rotenburg;2.94 
+148;01053;Herzogtum Lauenburg;3.76 
+149;16069;Hildburghausen;2.29 
+150;03254;Hildesheim;4.64 
+151;05958;Hochsauerlandkreis;3.18 
+152;06434;Hochtaunuskreis;6.30 
+153;09464;Hof;15.89 
+154;09475;Hof (Landkreis);3.53 
+155;08126;Hohenlohekreis;3.31 
+156;03255;Holzminden;2.81 
+157;05762;Höxter;3.21 
+158;16070;Ilm-Kreis;3.22 
+159;09161;Ingolstadt;14.44 
+160;16053;Jena;9.58 
+161;15086;Jerichower Land;2.19 
+162;07312;Kaiserslautern;10.80 
+163;07335;Kaiserslautern (Landkreis);4.22 
+164;08212;Karlsruhe;18.91 
+165;08215;Karlsruhe (Landkreis);6.26 
+166;06633;Kassel;4.13 
+167;06611;Kassel (Kreisfreie Stadt);23.59 
+168;09762;Kaufbeuren;14.50 
+169;09273;Kelheim;2.97 
+170;09763;Kempten (Allgäu);13.79 
+171;01002;Kiel;21.32 
+172;09675;Kitzingen;3.52 
+173;05154;Kleve;6.37 
+174;07111;Koblenz;14.18 
+175;08335;Konstanz;4.96 
+176;05114;Krefeld;22.99 
+177;09476;Kronach;2.96 
+178;09477;Kulmbach;3.33 
+179;07336;Kusel;3.35 
+180;16065;Kyffhäuserkreis;2.07 
+181;05315;Köln;22.54 
+182;06532;Lahn-Dill-Kreis;4.89 
+183;07313;Landau in der Pfalz;7.75 
+184;09181;Landsberg am Lech;3.18 
+185;09261;Landshut;14.97 
+186;09274;Landshut (Landkreis);3.45 
+187;03457;Leer;4.99 
+188;14713;Leipzig;19.67 
+189;14729;Leipzig (Landkreis);4.74 
+190;05316;Leverkusen;23.56 
+191;09478;Lichtenfels;3.39 
+192;06533;Limburg-Weilburg;4.98 
+193;09776;Lindau (Bodensee);5.15 
+194;05766;Lippe;6.69 
+195;08118;Ludwigsburg;8.86 
+196;07314;Ludwigshafen am Rhein;24.91 
+197;13076;Ludwigslust-Parchim;1.75 
+198;08336;Lörrach;4.20 
+199;01003;Lübeck;14.19 
+200;03354;Lüchow-Dannenberg;1.93 
+201;03355;Lüneburg;3.55 
+202;15003;Magdeburg;16.13 
+203;06435;Main-Kinzig-Kreis;4.90 
+204;09677;Main-Spessart;2.19 
+205;08128;Main-Tauber-Kreis;2.37 
+206;06436;Main-Taunus-Kreis;11.98 
+207;07315;Mainz;19.55 
+208;07339;Mainz-Bingen;5.36 
+209;08222;Mannheim;24.68 
+210;15087;Mansfeld-Südharz;2.81 
+211;06534;Marburg-Biedenkopf;3.76 
+212;07137;Mayen-Koblenz;5.71 
+213;13071;Mecklenburgische Seenplatte;1.61 
+214;14627;Meißen;4.87 
+215;09764;Memmingen;10.83 
+216;10042;Merzig-Wadern;4.55 
+217;05158;Mettmann;16.21 
+218;09182;Miesbach;2.53 
+219;09676;Miltenberg;3.58 
+220;05770;Minden-Lübbecke;8.11 
+221;14522;Mittelsachsen;4.73 
+222;12064;Märkisch-Oderland;3.55 
+223;05962;Märkischer Kreis;6.84 
+224;05116;Mönchengladbach;19.83 
+225;09183;Mühldorf a. Inn;3.95 
+226;05117;Mülheim an der Ruhr;24.32 
+227;09162;München;31.99 
+228;09184;München (Landkreis);7.61 
+229;05515;Münster;12.30 
+230;08225;Neckar-Odenwald-Kreis;3.19 
+231;09775;Neu-Ulm;6.12 
+232;09185;Neuburg-Schrobenhausen;3.57 
+233;09373;Neumarkt i.d. OPf.;2.76 
+234;01004;Neumünster;21.18 
+235;10043;Neunkirchen;10.49 
+236;09575;Neustadt a.d. Aisch-Bad Windsheim;2.34 
+237;09374;Neustadt a.d. Waldnaab;2.28 
+238;07316;Neustadt an der Weinstraße;6.94 
+239;07138;Neuwied;6.54 
+240;03256;Nienburg (Weser);3.29 
+241;01054;Nordfriesland;3.12 
+242;16062;Nordhausen;3.17 
+243;14730;Nordsachsen;3.29 
+244;13074;Nordwestmecklenburg;2.41 
+245;03155;Northeim;2.72 
+246;09564;Nürnberg;25.42 
+247;09574;Nürnberger Land;4.05 
+248;09780;Oberallgäu;2.13 
+249;05374;Oberbergischer Kreis;7.09 
+250;05119;Oberhausen;30.68 
+251;12065;Oberhavel;3.57 
+252;12066;Oberspreewald-Lausitz;3.71 
+253;06437;Odenwaldkreis;3.40 
+254;12067;Oder-Spree;2.90 
+255;06438;Offenbach;11.64 
+256;06413;Offenbach am Main;19.47 
+257;03458;Oldenburg;4.48 
+258;03403;Oldenburg (Oldb);25.59 
+259;05966;Olpe;4.34 
+260;08317;Ortenaukreis;4.35 
+261;03404;Osnabrück;21.73 
+262;03459;Osnabrück (Landkreis);4.83 
+263;08136;Ostalbkreis;3.98 
+264;09777;Ostallgäu;2.39 
+265;03356;Osterholz;5.79 
+266;01055;Ostholstein;4.05 
+267;12068;Ostprignitz-Ruppin;1.83 
+268;05774;Paderborn;4.83 
+269;09262;Passau;12.57 
+270;09275;Passau (Landkreis);4.32 
+271;03157;Peine;5.59 
+272;09186;Pfaffenhofen a.d. Ilm;4.04 
+273;08231;Pforzheim;12.05 
+274;01056;Pinneberg;9.03 
+275;07317;Pirmasens;12.14 
+276;01057;Plön;3.30 
+277;12054;Potsdam;11.33 
+278;12069;Potsdam-Mittelmark;2.82 
+279;12070;Prignitz;1.87 
+280;08216;Rastatt;5.28 
+281;08436;Ravensburg;3.73 
+282;05562;Recklinghausen;12.45 
+283;09276;Regen;2.58 
+284;09362;Regensburg;23.89 
+285;09375;Regensburg (Landkreis);3.15 
+286;03241;Region Hannover;7.47 
+287;10041;Regionalverband Saarbrücken;12.37 
+288;08119;Rems-Murr-Kreis;6.14 
+289;05120;Remscheid;18.50 
+290;01058;Rendsburg-Eckernförde;3.62 
+291;08415;Reutlingen;4.09 
+292;05362;Rhein-Erft-Kreis;9.83 
+293;07140;Rhein-Hunsrück-Kreis;2.72 
+294;05162;Rhein-Kreis Neuss;11.90 
+295;07141;Rhein-Lahn-Kreis;3.42 
+296;08226;Rhein-Neckar-Kreis;7.34 
+297;07338;Rhein-Pfalz-Kreis;7.75 
+298;05382;Rhein-Sieg-Kreis;8.81 
+299;06439;Rheingau-Taunus-Kreis;3.37 
+300;05378;Rheinisch-Bergischer Kreis;10.74 
+301;09673;Rhön-Grabfeld;2.25 
+302;09163;Rosenheim;18.26 
+303;09187;Rosenheim (Landkreis);4.07 
+304;13072;Rostock;2.06 
+305;13003;Rostock (Kreisfreie Stadt);13.05 
+306;03357;Rotenburg (Wümme);2.89 
+307;09576;Roth;3.26 
+308;09277;Rottal-Inn;3.71 
+309;08325;Rottweil;3.95 
+310;16074;Saale-Holzland-Kreis;2.95 
+311;16075;Saale-Orla-Kreis;2.39 
+312;15088;Saalekreis;4.29 
+313;16073;Saalfeld-Rudolstadt;2.93 
+314;10044;Saarlouis;8.85 
+315;10045;Saarpfalz-Kreis;7.75 
+316;03102;Salzgitter;9.91 
+317;15089;Salzlandkreis;3.80 
+318;03257;Schaumburg;6.39 
+319;01059;Schleswig-Flensburg;3.40 
+320;16066;Schmalkalden-Meiningen;2.81 
+321;09565;Schwabach;13.84 
+322;06634;Schwalm-Eder-Kreis;3.22 
+323;09376;Schwandorf;3.13 
+324;08326;Schwarzwald-Baar-Kreis;3.53 
+325;09662;Schweinfurt;22.73 
+326;09678;Schweinfurt (Landkreis);2.91 
+327;13004;Schwerin;9.27 
+328;08127;Schwäbisch Hall;3.35 
+329;01060;Segeberg;4.90 
+330;05970;Siegen-Wittgenstein;5.31 
+331;08437;Sigmaringen;2.95 
+332;05974;Soest;5.28 
+333;05122;Solingen;22.17 
+334;16072;Sonneberg;3.56 
+335;07318;Speyer;17.46 
+336;12071;Spree-Neiße;4.72 
+337;10046;St. Wendel;4.61 
+338;03359;Stade;4.22 
+339;09188;Starnberg;5.37 
+340;01061;Steinburg;3.92 
+341;05566;Steinfurt;6.12 
+342;15090;Stendal;1.77 
+343;01062;Stormarn;6.82 
+344;09263;Straubing;11.85 
+345;09278;Straubing-Bogen;2.96 
+346;08111;Stuttgart;22.01 
+347;05334;Städteregion Aachen;10.59 
+348;16054;Suhl;5.40 
+349;14628;Sächsische Schweiz-Osterzgebirge;4.14 
+350;16068;Sömmerda;2.15 
+351;07337;Südliche Weinstraße;3.34 
+352;07340;Südwestpfalz;2.52 
+353;12072;Teltow-Fläming;2.69 
+354;09377;Tirschenreuth;2.26 
+355;09189;Traunstein;3.03 
+356;07211;Trier;11.98 
+357;07235;Trier-Saarburg;3.08 
+358;08327;Tuttlingen;3.53 
+359;08416;Tübingen;5.87 
+360;12073;Uckermark;1.97 
+361;03360;Uelzen;2.15 
+362;08421;Ulm;12.78 
+363;05978;Unna;12.12 
+364;16064;Unstrut-Hainich-Kreis;2.64 
+365;09778;Unterallgäu;3.12 
+366;03460;Vechta;5.67 
+367;03361;Verden;5.06 
+368;05166;Viersen;9.97 
+369;06535;Vogelsbergkreis;2.12 
+370;14523;Vogtlandkreis;4.95 
+371;13075;Vorpommern-Greifswald;1.91 
+372;13073;Vorpommern-Rügen;2.19 
+373;07233;Vulkaneifel;2.67 
+374;06635;Waldeck-Frankenberg;2.35 
+375;08337;Waldshut;3.13 
+376;05570;Warendorf;4.91 
+377;16063;Wartburgkreis;2.77 
+378;09363;Weiden i.d. OPf.;11.32 
+379;09190;Weilheim-Schongau;2.98 
+380;16055;Weimar;9.68 
+381;16071;Weimarer Land;2.78 
+382;09577;Weißenburg-Gunzenhausen;2.61 
+383;06636;Werra-Meißner-Kreis;2.75 
+384;05170;Wesel;8.46 
+385;03461;Wesermarsch;4.35 
+386;07143;Westerwaldkreis;5.74 
+387;06440;Wetteraukreis;4.41 
+388;06414;Wiesbaden;14.23 
+389;03405;Wilhelmshaven;16.05 
+390;15091;Wittenberg;2.53 
+391;03462;Wittmund;3.42 
+392;03158;Wolfenbüttel;3.37 
+393;03103;Wolfsburg;10.90 
+394;07319;Worms;10.86 
+395;09479;Wunsiedel i. Fichtelgebirge;3.49 
+396;05124;Wuppertal;20.48 
+397;09663;Würzburg;20.03 
+398;09679;Würzburg (Landkreis);3.12 
+399;08417;Zollernalbkreis;4.30 
+400;07320;Zweibrücken;10.52 
+401;14524;Zwickau;8.42 
+;;Deutschland;4.50 

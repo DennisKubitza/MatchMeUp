@@ -1,0 +1,89 @@
+# BIGGEST MUNCIPALITIES
+
+# Quality Control:
+
+# All relevant Entries are present, Location, Population and Districts have no Missings
+# Duplicates are controlled: All Muncipalities which share names are different real-world places.
+# Around 200 of the 10.787 municpalities in Germany are missing. All Communities with more than 20.000 are included, which was manually check.
+# For the 369 communities above 10.000 inhabits in 2019, we found 371 distinct entries. Considering updated population numbers, this seems reasonable. As there is no 
+# complete list of muncipalities for Germany with current number of inhabitants, this information is not verifiable.
+
+
+SELECT DISTINCT ?city ?cityLabel ?district ?districtLabel ?isCity ?isIndependentCity ?regiokeyCity ?regioKey (MAX(?population) AS ?maxPopulation) (MAX(?loc) AS ?maxLoc) WHERE {
+  {?city wdt:P31/wdt:P279* wd:Q262166 }
+  UNION
+  {?city wdt:P31 wd:Q2267870}
+  UNION
+  {?city wdt:P31/wdt:P279* wd:Q515.
+  	  ?city wdt:P17 wd:Q183.}
+  MINUS 
+  {
+    {?city wdt:P31/wdt:P279* wd:Q515. FILTER (?city != wd:Q16799 && ?city != wd:Q565513 && ?city != wd:Q33492620 && ?city != wd:Q552508)} # Cities, that are Cities except some missclassifications
+	# Construct Base Entities for further Queries
+	UNION
+ {?city wdt:P31 wd:Q3957.
+									  FILTER ( ?city = wd:Q22950  || ?city = wd:Q32752658 ||  
+											 ?city =  wd:Q22867 || ?city = wd:Q148091 || ?city =  wd:Q541832 ||?city =  wd:Q32041291 )} #Cities that are counted as Towns and not cities
+	  UNION {?city wdt:P31 wd:Q262166. FILTER (?city = wd:Q61733)}  #Add Tamm
+	  UNION {?city wdt:P31 wd:Q15974307. FILTER (?city = wd:Q14892)} # Add Buchholz in der Nordheide 
+	 
+	  # Get Relevant Information for the Base Entries
+	  ?city wdt:P17 wd:Q183 .
+	  
+	  MINUS #Remove former cities (medieval times) which are part of a vilages
+	  {
+	  ?city wdt:P31/wdt:P279* wd:Q515.
+	  ?city wdt:P17 wd:Q183 .
+	  ?city wdt:P31/wdt:P279*  wd:Q253019.
+	  FILTER (?city != wd:Q14833 && ?city != wd:Q157035) # Exception for Heinsberg, Bückeburg
+	  }
+	  MINUS #Remove former cities which are part of a bigger city as set of quarters
+	  {
+	  ?city wdt:P31/wdt:P279* wd:Q515.
+	  ?city wdt:P17 wd:Q183 .
+	  ?city wdt:P31/wdt:P279*  wd:Q2740635.
+	  }
+	  MINUS #Remove former cities which are part of a bigger city as quarter
+	  {
+	  ?city wdt:P31/wdt:P279* wd:Q515.
+	  ?city wdt:P17 wd:Q183 .
+	  ?city wdt:P31 wd:Q2983893.
+	  }
+	  MINUS #Remove administration centeres, that are not cities but listed as such by inheritence
+	  {
+	  ?city wdt:P31/wdt:P279* wd:Q515.
+	  ?city wdt:P17 wd:Q183 .
+	  ?city wdt:P31 wd:Q262166
+	  FILTER (?city != wd:Q61733) # Exception for Tamm
+	  }
+	  MINUS #Remove parts of admistration centeres
+	  {
+	  ?city wdt:P31/wdt:P279* wd:Q515.
+	  ?city wdt:P17 wd:Q183 .
+	  ?city wdt:P131 ?district2.
+	  ?district2 wdt:P31 wd:Q262166
+	  }
+	  FILTER ((?city != wd:Q502780) || ((?city = wd:Q502780) &&  (?district = wd:Q8518))) # Exclude an entry of a Lordship, introduced by multiple relations of P131*
+  }
+  
+  # Get the relevant Information
+   BIND(FALSE AS ?isIndependentCity)
+   BIND(FALSE AS ?isCity)
+  ?city wdt:P1082 ?population .
+  ?city wdt:P625 ?loc .
+
+  OPTIONAL {?city wdt:P131* ?district. #One relation ist not enough, as Cities for Konstanz have a subdevision
+  ?district wdt:P31/wdt:P279* wd:Q106658.
+  FILTER NOT EXISTS {?district wdt:P576 ?rel2.} 
+  OPTIONAL {?district wdt:P440 ?regioKey}
+  }
+  FILTER NOT EXISTS {?city wdt:P31 wd:Q2740635}
+  FILTER NOT EXISTS {?city wdt:P576 ?rel1.} #Remove Muncipalities that are marked as dissolved
+  FILTER NOT EXISTS {?city p:P31 ?obj.  #Remove Municipalities that are not Muncipalities anymore
+  ?obj ps:P31/wdt:279* wd:Q262166.
+  ?obj pq:P582 ?date.}
+  FILTER (?city != wd:Q61480)
+  SERVICE wikibase:label {bd:serviceParam wikibase:language "de" .}
+}
+GROUP BY ?city ?cityLabel ?district ?districtLabel ?isCity ?isIndependentCity ?regiokeyCity ?regioKey  
+ORDER BY DESC(?population)
