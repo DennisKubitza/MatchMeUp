@@ -8,6 +8,7 @@ This folder contains **raw data**, **geospatial shapes**, and **scripts** used t
 
 After running each cell of the file **`1_DataPreparation.RMD`**,  
 the data will be **fully prepared** and **all major datasets** will be **loaded and ready for analysis**.
+A complete Overview of the last run is provided as .html file and can be visiualised here: https://html-preview.github.io/?url=https://github.com/DennisKubitza/MatchMeUp/blob/main/DataPreparation/1_DataPreparation.html
 
 ---
 
