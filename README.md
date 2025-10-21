@@ -20,6 +20,8 @@ The findings highlight the importance of accurate spatial modeling, showing that
 
 The project is organized into the following main directories:
 
+* `./config/`: Contains a list of all locally installed packages, providing detailed control over the R environment.
+* `./renv/`: Contains the output of the `renv` package. This folder allows other users to restore and replicate the exact package environment used for this analysis, ensuring full reproducibility.
 * `./DataPreparation/`: Contains the initial data preparation script (`1_DataPreparation.Rmd`), raw input data (under `Tables`, `Shapes`, `Wikidata`), and the Google API script.
 * `./DataBackups/`: Stores pre-processed `.Rdata` files, including the crucial distance matrix data, to avoid re-running time-consuming scripts.
 * `./Outputs/`: The destination for all final outputs relevant to the paper, including figures, LaTeX tables, and regression results.
