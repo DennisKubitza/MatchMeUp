@@ -40,7 +40,7 @@ The main changes include fixing typos, improving sentence flow, and converting t
 To keep the repository size manageable, not every file generated during the analysis (e.g., intermediate tables, all regression outputs) is included here. However, the complete HTML protocol, which shows the full process and all outputs, is available for viewing online.
 
 You can view the main analysis protocol using the following links:
-  * [**Analysis Protocol (1\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/?url=https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
+  * [**Analysis Protocol (1\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
 
 
 ## 🚀 Instructions for Replication
