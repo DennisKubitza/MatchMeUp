@@ -43,7 +43,7 @@ You can view the main analysis protocol using the following links:
   * [**Analysis Protocol (1\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
   * [**Analysis Protocol (2\_Analysis\_Spillover\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/2_Analysis_Spillover_based.html)
   * [**Analysis Protocol (3\_Analysis\_Best\_combination.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/3_Analysis_Best_combination.html)
-  * [**Analysis Protocol (4\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
+  * [**Analysis Protocol (4\_Analysis\_Profession\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/4_Analysis_Profession_based.html)
 
 
 
@@ -73,7 +73,7 @@ I recommend the following order of execution:
 1.  **Run `1_Analysis_AAB_based.Rmd` multiple times.** This script must be configured and run for **each of the six professional groups** (including "all professions").
     * Before each run, open `1_Analysis_AAB_based.Rmd` and change the selected profession group in the configuration section (around line 6).
     * You must run this for the **"all professions"** category before proceeding to scripts 2 and 3.
-    * To run script 4, you must first execute script 1 for **all five specific profession groups**.
+    * To run script 4, you must first execute script 1 additionally for **all five specific profession groups**.
 
 2.  **Run `2_Analysis_Spillover_based.Rmd`.** This script uses the output generated for "all professions."
 
