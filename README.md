@@ -41,6 +41,11 @@ To keep the repository size manageable, not every file generated during the anal
 
 You can view the main analysis protocol using the following links:
   * [**Analysis Protocol (1\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
+  * [**Analysis Protocol (2\_Analysis\_Spillover\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/2_Analysis_Spillover_based.html)
+  * [**Analysis Protocol (3\_Analysis\_Best\_combination.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/3_Analysis_Best_combination.html)
+  * [**Analysis Protocol (4\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/?https://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
+
+
 
 Regression tables are published under Output/Regressions.
 
