@@ -1,0 +1,164 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+ 
+
+```{r fig.height=12, fig.width=16}
+
+
+library(ggplot2)
+library(sf)
+library(dplyr)
+library(spatialreg)
+library(spdep)
+
+rm(list=ls())
+mypath <- "./DataBackups/"
+
+
+load(paste0(mypath,"all professionsM.Rdata"))
+
+```
+
+```{r}
+load(file = "./DataBackups/weights_data.RData")
+```
+
+# Define Models
+```{r fig.height=12, fig.width=16}
+
+target = "M"
+
+formula_base <- as.formula(paste0(target,"  ~ U + V "))
+formula_agg <- as.formula(paste0(target,"   ~ U + V + Agglomeration"))
+formula_ctrl <- as.formula(paste0(target,"   ~ U + V + unemp25 + cons + highSE +  medSE  "))
+formula_ctrl_agg <- as.formula(paste0(target,"   ~ U + V + unemp25 + cons + highSE + medSE  + Agglomeration"))
+
+
+
+model_base <- lm(formula_base, profession, na.action = na.exclude)
+model_ctrl <- lm(formula_ctrl, profession, na.action = na.exclude)
+
+```
+
+
+# Re-Estimate models with agglomeration and weight matrices
+```{R}
+
+
+model_ctrl_dist <- lmSLX(formula_ctrl, profession_new, best_Weights_distances_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1 )
+model_ctrl_commuters <- lmSLX(formula_ctrl, profession_new, Weights_commuters_outbound, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1 )
+model_ctrl_public <- lmSLX(formula_ctrl, profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+profession_new$Agglomeration <- profession_new$AgglomerationShareCity
+model_ctrl_dist_share <- lmSLX(formula_ctrl_agg , profession_new, best_Weights_distances_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_ctrl_commuters_share <- lmSLX(formula_ctrl_agg , profession_new, Weights_commuters_outbound, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_ctrl_public_share <- lmSLX(formula_ctrl_agg , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+profession_new$Agglomeration <- profession_new$AgglomerationDistPop
+model_ctrl_dist_dist <- lmSLX(formula_ctrl_agg, profession_new, best_Weights_distances_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_ctrl_commuters_dist <- lmSLX(formula_ctrl_agg , profession_new, Weights_commuters_outbound, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_ctrl_public_dist <- lmSLX(formula_ctrl_agg , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+profession_new$Agglomeration <- profession_new$AgglomerationPublicPop
+model_ctrl_dist_pop <- lmSLX(formula_ctrl_agg, profession_new, best_Weights_distances_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_ctrl_commuters_pop <- lmSLX(formula_ctrl_agg , profession_new, Weights_commuters_outbound, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_ctrl_public_pop <- lmSLX(formula_ctrl_agg , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+```
+
+# Output Results
+```{R}
+library(jtools)
+library(huxtable)
+
+output_all <- export_summs(
+  model_ctrl_dist_share,  
+  model_ctrl_dist_dist,
+  model_ctrl_dist_pop,
+  model_ctrl_commuters_share,  
+  model_ctrl_commuters_dist,
+  model_ctrl_commuters_pop,
+  model_ctrl_public_share,  
+  model_ctrl_public_dist,
+  model_ctrl_public_pop,
+  model.names = c("W-DIST + CITY-SHARE", "W-DIST + POP_DIST", "W-DIST + POP-PUBLIC", "W-COM-VET-O + CITY-SHARE", "W-COM-VET-O + POP-DIST", "W-COM-VET-O + POP-PUBLIC", "W-POP_PUB + CITY-SHARE", "W-POP_PUB + POP-DIST", "W-POP_PUB + POP-PUBLIC"),
+  stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1), 
+  number_format = "%.3f", 
+  statistics = c("logLik","AIC","BIC","N. obs." = "nobs")
+)
+output_all %>% quick_html(file = paste0("./Outputs/Regressions/OutputCombintaion.html"))
+
+
+output_table_best <- export_summs(
+  model_ctrl_public_pop,
+  model_ctrl_dist_pop, 
+   model_ctrl_public_dist,
+  model.names = c("W-POP_PUB + POP_PUBLIC", "W-DIST + POP_PUBLIC" , "W-POP_PUB + POP-DIST"),
+  stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1), 
+  number_format = "%.3f", 
+statistics = c("logLik","AIC","BIC","N. obs." = "nobs")
+)
+
+output_table_best %>% quick_html(file = paste0("./Outputs/Regressions/Best.html"))
+
+
+```
+
+Create overview of Model Nestings for model_ctrl_public_pop.
+
+
+
+
+```{r}
+library(lmtest)
+
+formula_base <- as.formula(paste0(target,"  ~ U + V "))
+formula_agg <- as.formula(paste0(target,"   ~ U + V + Agglomeration"))
+formula_ctrl <- as.formula(paste0(target,"   ~ U + V + unemp25 + cons + highSE +  medSE  "))
+formula_ctrl_agg <- as.formula(paste0(target,"   ~ U + V + unemp25 + cons + highSE + medSE  + Agglomeration"))
+
+profession_new$Agglomeration <- profession_new$AgglomerationPublicPop
+
+
+
+model_base <- lm(formula_base,  profession, na.action = na.exclude)
+
+model_agg <- lm(formula_agg,  profession_new, na.action = na.exclude)
+model_spill <- lmSLX(formula_base , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_controls<- lm(formula_ctrl ,  profession_new, na.action = na.exclude)
+
+model_ctrl_agg<- lm(formula_ctrl_agg ,  profession_new, na.action = na.exclude)
+model_ctrl_spill<- lmSLX(formula_ctrl , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+model_agg_spill <- lmSLX(formula_agg , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+model_full <- lmSLX(formula_ctrl_agg , profession_new, best_Weights_public_pop, na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+
+
+lrtest( model_base, model_controls)
+lrtest( model_base, model_agg)
+lrtest( model_base, model_spill)
+
+
+lrtest( model_controls, model_ctrl_agg)
+lrtest( model_controls, model_ctrl_spill)
+
+lrtest( model_agg, model_ctrl_agg)
+lrtest( model_agg, model_agg_spill)
+
+lrtest( model_spill, model_ctrl_spill)
+lrtest( model_spill, model_agg_spill)
+
+
+
+lrtest( model_ctrl_spill, model_full)
+lrtest( model_agg_spill, model_full)
+lrtest( model_ctrl_agg, model_full)
+
+
+```
+
