@@ -29,6 +29,20 @@ The project is organized into the following main directories:
 
 ---
 
+Of course. Here is the corrected and improved version of your markdown text.
+
+The main changes include fixing typos, improving sentence flow, and converting the raw link into a viewable HTML link that will render correctly in a browser.
+
+-----
+
+## 📜 Viewing the Protocols
+
+To keep the repository size manageable, not every file generated during the analysis (e.g., intermediate tables, all regression outputs) is included here. However, the complete HTML protocol, which shows the full process and all outputs, is available for viewing online.
+
+You can view the main analysis protocol using the following links:
+  * [**Analysis Protocol (1\_Analysis\_AAB\_based.html)**](https://htmlpreview.github.io/%3Fhttps://raw.githubusercontent.com/DennisKubitza/MatchMeUp/refs/heads/main/1_Analysis_AAB_based.html)
+
+
 ## 🚀 Instructions for Replication
 
 To reproduce the results, please follow the steps below. The analysis scripts are designed to be run sequentially.
