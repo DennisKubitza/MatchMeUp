@@ -1,0 +1,342 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+ 
+
+
+```{r fig.height=12, fig.width=16}
+
+library(ggplot2)
+library(sf)
+library(dplyr)
+library(spatialreg)
+library(spdep)
+
+rm(list=ls())
+mypath <- "./DataBackups/"
+profession_names <- c(
+  "sales professions",
+  "mechatronics, energy, and electrical professions",
+  "professions in business management and organization",
+  "medical health professions",
+  "machine and vehicle technology professions",
+  "all professions"
+)
+
+kreise <- sf::st_read("./DataPreparation/Shapes/Kreise/vg1000_12-31.utm32s.shape.ebenen/vg1000_ebenen_1231/VG1000_KRS.shp") # though not imported directly, all other auxiliary files must be present in the path
+kreise <- st_transform(kreise, "WGS84")
+kreise_merged <- kreise %>%
+  group_by(SN_L) %>%
+  summarize(geometry = st_union(geometry))
+```
+
+```{r fig.height=12, fig.width=16}
+library(stringr)
+library(ggrepel)
+
+
+model_list <- list()
+
+graphics_list <- list()
+spatial_clustering_list <- list()
+load(file = "./DataBackups/weights_data.RData")
+
+for (p in profession_names)
+{
+#p <- profession_names[1]  
+  
+load(paste0(mypath,p,"M.Rdata"))
+load(file = "./DataBackups/weights_data.RData")
+
+print(p)
+
+target = "M"
+formula_base <- as.formula(paste0(target,"  ~ U + V "))
+formula <- as.formula(paste0(target,"   ~ U + V + unemp25 + cons + highSE +  medSE  "))
+formula_pub_num <- as.formula(paste0(target,"   ~ U + V + unemp25 + cons + highSE + medSE  + Agglomeration"))
+target = "M"
+
+
+
+profession_new$Agglomeration <- profession_new$AgglomerationPublicPop49
+
+
+# Begin Weight Matrix computation
+columns_of_interest <- c('M','U', 'V', 'unemp25', 'cons', 'lowSE', 'medSE', 'Agglomeration')
+# Replace Inf and -Inf with NA in the specified columns
+profession_new[columns_of_interest] <- lapply(profession_new[columns_of_interest], function(x) replace(x, is.infinite(x), NA))
+# Remove rows with any NA values in the specified columns
+profession_new <- profession_new[complete.cases(profession_new[columns_of_interest]), ]
+
+best_Weights_public_pop <- best_Weights_public_pop_mat[colnames(best_Weights_public_pop_mat) %in% profession_new$region,colnames(best_Weights_public_pop_mat) %in% profession_new$region]
+
+################
+library(dplyr)
+
+distances_relevant_pop <- merge(distances_relevant,final, by.x="city...1",by.y="city")
+distances_relevant_pop <- merge(distances_relevant_pop,final,by.x="city...4",by.y="city")
+
+profession_new <- profession_new[!is.na(profession_new$OpenPositions),]
+
+## As all Professions have different Regions, we need to Reduce the matrix to relevant regions. As the initial matrix, already does not contain all regions, it is easier to re-calculate evrything.
+distances_relevant_test_public <-  distances_relevant_pop %>% group_by(ABDistrict...6) %>% mutate(district_pop = sum(unique(maxPopulation.y))) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(public <= 51.28167) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(district_pop = max(district_pop), count= sum(unique(maxPopulation.y)), Weight=count/district_pop, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+
+
+Weights_public_pop  <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+  row.names(Weights_public_pop)<- profession_new$region
+  colnames(Weights_public_pop) <- profession_new$region
+
+  for(i in 1:nrow(distances_relevant_test_public))
+  {
+    Weights_public_pop[row.names(Weights_public_pop)==distances_relevant_test_public$ABDistrict...3[i], colnames(Weights_public_pop)==distances_relevant_test_public$ABDistrict...6[i]]<- distances_relevant_test_public$Weight[i]
+  }
+  
+  Weights_public_pop <- Weights_public_pop/max(Weights_public_pop)
+
+  model <- lmSLX(formula_pub_num , profession_new, mat2listw(Weights_public_pop, style="M"), na.action=na.omit, zero.policy=TRUE, Durbin=~  U + V  -1)
+
+  model_list$x <- model
+  names(model_list)<-c(names(model_list)[1:(length(names(model_list)))-1], p)
+  
+  #
+  estimate_vector<- model$coefficients[-c(2,3,9:10)]
+  estimate_values <- as.matrix(cbind("(Intercept)"=1,st_drop_geometry(profession_new[,names(estimate_vector[-c(1)])])))
+  
+  
+  profession_new$Efficiency <- exp(estimate_values %*% estimate_vector) 
+
+map_efficiency <- ggplot() + 
+  geom_sf(data=districts, fill = "#e4e4e4") +
+  geom_sf(data=st_as_sf(profession_new), aes(fill = Efficiency))+
+  geom_sf(data=kreise_merged,fill=NA,
+          color = "#ec7063",   
+          lwd = 1.2) +
+  theme(legend.text.align = 1)  +
+  labs(fill = str_wrap(paste0("Efficiency for ", p), width = 50)) + 
+  guides(
+    fill = guide_colorbar(direction = "horizontal", title.hjust=0.5, title.position="top", barwidth = 20,  # Adjust this value to change the width of the colorbar
+      barheight = 1  ), 
+# Adjust rows for the fill legend
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 18, face="bold"),
+    legend.box = "horizontal",
+    legend.box.just = "center",
+    legend.spacing.x = unit(0.5, "cm") 
+  )
+
+
+map_efficiency <- map_efficiency +  scale_fill_gradientn(colors = custom_colors(100), na.value="#e4e4e4")
+print(map_efficiency)
+
+
+  graphics_list$x <- map_efficiency
+  names(graphics_list)<-names(model_list)
+
+}
+
+```
+
+
+
+```{r fig.height=24, fig.width=16}
+
+library(gridExtra)
+combined_plot <- do.call(grid.arrange, c(graphics_list, ncol = 2, nrow = 3))
+print(combined_plot)
+
+
+#combined_plot <- do.call(grid.arrange, c(spatial_clustering_list, ncol = 2, nrow = 3))
+#print(combined_plot)
+
+
+```
+
+```{r}
+library(jtools)
+library(huxtable)
+# Combine model summaries into a single huxtable
+ht <- export_summs(model_list$`all professions`,
+                   model_list$`machine and vehicle technology professions`,
+                   model_list$`mechatronics, energy, and electrical professions`,
+                   model_list$`medical health professions`,
+                   model_list$`professions in business management and organization`,
+                   model_list$`sales professions`,
+                   model.names = c("All Professions",
+                                   "Machine & Vehicle Technology",
+                                   "Mechatronics, Energy, Electrical",
+                                   "Medical Health",
+                                   "Business Management",
+                                   "Sales"), 
+  number_format = "%.3f", 
+  statistics = c("logLik","AIC","BIC","N. obs." = "nobs"),
+  stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05, `^` = 0.1))
+
+# Apply any additional formatting to the huxtable if needed
+ht <- ht %>%
+  
+  set_header_rows(1, TRUE) %>%
+  set_header_cols(1, TRUE)
+
+# Display the huxtable
+print_screen(ht)
+
+# Export to HTML
+quick_html(ht, file = "./Outputs/Regressions/Profession_differences.html")
+
+
+
+```
+
+
+
+```{R fig.height=10, fig.width=7}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+
+
+
+# Extract coefficients and create a data frame
+# Extract coefficients and create a data frame
+# Extract coefficients, standard errors and create a data frame
+coef_df <- do.call(rbind, lapply(names(model_list), function(profession) {
+  model <- model_list[[profession]]
+  tidy_model <- broom::tidy(model)
+  tidy_model$Profession <- profession
+  tidy_model
+}))
+
+
+# Function to add line breaks to labels
+add_line_breaks <- function(label, width = 30) {
+  str_wrap(label, width = width)
+}
+
+
+
+ #Extract coefficients, standard errors and create a data frame
+coef_df <- do.call(rbind, lapply(names(model_list), function(profession) {
+  model <- model_list[[profession]]
+  tidy_model <- broom::tidy(model)
+  tidy_model$Profession <- profession
+  tidy_model
+}))
+
+# Create an offset variable for the y-axis
+coef_df <- coef_df %>%
+  group_by(term) %>%
+  mutate(offset = as.numeric(factor(Profession)) * 0.1) %>%  # Adjust the offset multiplier as needed
+  ungroup()
+
+# Add the English profession column
+
+
+
+coef_df$term[coef_df$term=="(Intercept)"] <- "Efficiency"
+coef_df$term[coef_df$term=="AgglomerationDistPop"] <- "Agglomeration"
+
+coef_df$term[coef_df$term=="lag.U"] <- "U.lag"
+coef_df$term[coef_df$term=="lag.V"] <- "V.lag"
+
+
+coef_df1 <- coef_df[coef_df$term %in% c("U","V","U.lag","V.lag","Efficiency", "lambda"),]
+
+coef_df2 <- coef_df[!(coef_df$term %in% c("U","V","U.lag","V.lag","Efficiency","lambda")),]
+
+library(viridis)
+library(scales)
+dark_viridis_colors <- viridis_pal(option = "G")(10)[3:8]
+
+# Plot the coefficients with error bars and vertical offset
+
+coef_df1$term <- factor(coef_df1$term, levels = c("lambda", "U.lag","V.lag", "U", "V",  "Efficiency" ))
+
+plot_eff1 <- ggplot(coef_df1, aes(x = term, y = estimate, color = Profession))+
+  geom_point(position = position_dodge(width = 0.8), size = 3) +
+  geom_errorbar(aes(ymin = estimate - 1.96 * std.error, ymax = estimate +  1.96 *std.error),
+                width = 0.2, size = 1, position = position_dodge(width = 0.8))+
+  geom_vline(xintercept = 0, linetype = "solid", color = "black", size = 6) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+       x = "Coefficient Term",
+       y = "Estimate",
+       color = "Profession") +
+theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        legend.position = "bottom",   legend.text = element_text(size = 14),
+        plot.margin = margin(t = 10, r = 40, b = 10, l = 10),
+  legend.title = element_text(size = 16),
+  legend.title.position = "top",
+  legend.box = "horizontal",
+    # Adjust margins (top, right, bottom, left)
+    panel.grid.major = element_line(color = "darkgray", size = 0.25),  # Darker major grid lines
+    panel.grid.minor = element_line(color = "gray", size = 0.25),
+      axis.title = element_text(size = 16),
+    plot.title = element_text(size = 20)) +
+  guides(color = guide_legend(title.position = "top", nrow = 6, byrow = TRUE)) +
+#  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)),limits = c(-0.2, 0.2))   +
+  scale_x_discrete(labels = function(x) sapply(x, add_line_breaks))+
+  scale_color_manual(values=custom_disc_color) + guides(color = guide_legend(ncol = 2))
+
+
+
+plot_eff2 <- ggplot(coef_df2, aes(color = Profession, y = estimate, x= term)) +
+  geom_point(position = position_dodge(width = 0.8), size = 3)  +
+  geom_errorbar(aes(ymin = estimate -  1.96 *std.error, ymax = estimate +  1.96 *std.error),
+                width = 0.2, size = 1, position = position_dodge(width = 0.8)) +
+  geom_vline(xintercept = 0, linetype = "solid", color = "black", size = 1.2)+
+  coord_flip() +
+  theme_minimal() +
+  labs(
+       x = "Coefficient Term",
+       y = "Estimate",
+       color = "Profession") +
+theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+          axis.title = element_text(size = 16),
+        # Adjust margins (top, right, bottom, left)
+    panel.grid.major = element_line(color = "darkgray", size = 0.25),  # Darker major grid lines
+    panel.grid.minor = element_line(color = "gray", size = 0.25),
+    plot.title = element_text(size = 20),
+        legend.position = "bottom",   legend.text = element_text(size = 14),
+      plot.margin = margin(t = 10, r = 40, b = 10, l = 10),
+  legend.title = element_text(size = 16)) +
+  guides(color = guide_legend(title.position = "top", nrow = 6, byrow = TRUE)) +
+  scale_y_continuous(expand = expansion(mult = c(0.15, 0.15)),limits = c(-0.21, 0.21))   +
+  scale_x_discrete(labels = function(x) sapply(x, add_line_breaks))+
+  scale_color_manual(values=custom_disc_color)
+
+plot_eff1
+```
+
+
+
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+
+
+# Arrange with shared legend
+combined <- ggarrange(
+  plot_eff1, plot_eff2,
+  ncol = 2, nrow = 1,
+  common.legend = TRUE,   # <- share legend
+  legend = "bottom"       # <- put legend below
+)
+
+# Save as PNG
+ggsave("./Outputs/Figures/plots_combined.png", combined,
+       width = 12, height = 12, units = "in", dpi = 600)
+```
+
