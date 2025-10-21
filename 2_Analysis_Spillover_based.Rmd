@@ -1,0 +1,968 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+
+```{r}
+rm(list=ls())
+load("./DataBackups/all professionsM.Rdata")
+
+
+```
+
+# Include also Spatial component over district border
+
+
+First some comparisons between the old models... 
+
+```{r fig.height=12, fig.width=8}
+library(ggplot2)
+library(sf)
+
+target = "M"
+model_base <- lm(formula_base, profession, na.action = na.exclude)
+model_ctrl <- lm(formula_ctrl, profession, na.action = na.exclude)
+profession_new <-  profession
+```
+
+
+
+# Create initial proximity matrixes 
+
+## Geographic Neighbouring Districts - degree 1 and 2 
+```{r}
+library(sf)
+library(spdep)
+library(spatialreg)
+library(jtools)
+
+
+Weights_border_1 <- nb2listw(poly2nb(st_sf(profession_new)),style="B", zero.policy = TRUE)
+lagged <- nblag(poly2nb(st_sf(profession_new)), 3)
+
+# Example usage
+lag2 <- nblag_cumul(lagged[-3])
+lag3 <- nblag_cumul(lagged)
+
+Weights_border_2 <- nb2listw(lag2, style="B", zero.policy = TRUE) 
+Weights_border_3 <- nb2listw(lag3, style="C" , zero.policy = TRUE)
+
+
+Weights_neighbour_1 <- listw2mat(Weights_border_1)
+Weights_neighbour_2 <- listw2mat(Weights_border_2)
+Weights_neighbour_3 <- listw2mat(Weights_border_3)
+
+model_neighbour_1 <-  lmSLX(formula_base, profession_new, listw=Weights_border_1,zero.policy=TRUE, Durbin=~ U + V  -1)
+model_neighbour_1 <-  lmSLX(formula_base, profession_new, listw=Weights_border_1,zero.policy=TRUE, Durbin=~ U + V  -1)
+
+model_neighbour_2 <- lmSLX(formula_base, profession_new, listw=Weights_border_2,zero.policy=TRUE, Durbin=~  U + V  -1)
+model_neighbour_3 <- lmSLX(formula_base, profession_new, listw=Weights_border_3,zero.policy=TRUE, Durbin=~ U + V  -1)
+model_ctrl_neighbour_1 <-  lmSLX(formula_ctrl, profession_new, listw=Weights_border_1,zero.policy=TRUE, Durbin=~ U + V  -1)
+model_ctrl_neighbour_2 <- lmSLX(formula_ctrl, profession_new, listw=Weights_border_2,zero.policy=TRUE, Durbin=~  U + V  -1)
+model_ctrl_neighbour_3 <- lmSLX(formula_ctrl, profession_new, listw=Weights_border_3,zero.policy=TRUE, Durbin=~ U + V  -1)
+
+
+summary(model_base)
+summary(model_neighbour_1)
+```
+## Belonging to Functional regions - Neighboorhoods / Shared Cities / Shared Pop
+
+```{r warning=FALSE}
+#Create Base Neighbourhood matrix
+Weights_neighbours <- listw2mat(nb2listw(nblag(poly2nb(st_sf(profession_new)), 2)[[1]], style="B", zero.policy = TRUE))
+row.names(Weights_neighbours) <- profession_new$region
+colnames(Weights_neighbours) <- profession_new$region
+
+Weights_neighbours<-Weights_neighbours[!is.na(profession_new$OpenPositions),!is.na(profession_new$OpenPositions)]
+
+#Functional Regions... Create 3 different matrixes
+profession_new <- profession_new[!is.na(profession_new$OpenPositions),]
+Weights_functional <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+colnames(Weights_functional) <- profession_new$region
+row.names(Weights_functional) <- profession_new$region
+Weights_functional_cities <- Weights_functional
+Weights_functional_pop <- Weights_functional
+
+
+###### Iterates through all regions, exctracts their rams and sets all <- 1 which have mathings rams
+for(i in 1:length(profession_new$rams))
+{
+  ram1 <- strsplit(profession_new$rams[i],";")[[1]] # Returns a list of rams for each i 
+  for(j in  1:length(profession_new$rams))
+  {
+    ram2 <- strsplit(profession_new$rams[j],";")[[1]]  # Returns a list of rams for each j
+    if(sum(ram1 %in% ram2)>0)
+    {
+      if(i != j)
+      {
+        # Weights for bordering
+        Weights_functional[i,j]<-1
+        
+        ### Weights for City sharing
+        #Weights_functional_cities[i,j] <- sum(profession$ram %in% intersect(ram2,ram1) & final$ABDistrict %in% profession_new$region[i]) / sum(final$ABDistrict %in% profession_new$region[i]) 
+        
+        ### Weights for Population sharing
+        #Weights_functional_pop[i,j] <- sum(final$maxPopulation[final$ram %in% intersect(ram2,ram1) & final$ABDistrict %in% profession_new$region[i]]) / sum(final$maxPopulation[final$ABDistrict %in% profession_new$region[i]])
+      }
+    }
+  }
+}
+#### important... definition of row and columns
+
+Weights_functional <- pmin(Weights_neighbours,Weights_functional)
+Weights_functional_cities <- pmin(Weights_neighbours,Weights_functional_cities)
+Weights_functional_pop <- pmin(Weights_neighbours,Weights_functional_pop)
+
+model_functional <- lmSLX(formula_base, profession_new, mat2listw(Weights_functional, style="B"), na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+#model_functional_cities <- lmSLX(formula_base, profession_new, mat2listw(Weights_functional_cities, style="B"), na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+#model_functional_pop <- lmSLX(formula_base, profession_new, mat2listw(Weights_functional_pop, style="B"), na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+model_ctrl_functional <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_functional, style="B"), na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+#model_ctrl_functional_cities <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_functional_cities, style="B"), na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+#model_ctrl_functional_pop <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_functional_pop, style="B"), na.action=na.omit, zero.policy = TRUE, Durbin=~  U + V  -1)
+
+```
+
+## Belonging to Regions
+
+```{r}
+#Functional Regions... Create 3 different matrixes
+profession_new <- profession_new[!is.na(profession_new$OpenPositions),]
+Weights_regions <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+for(i in 1:length(unique(profession_new$parentID)))
+{
+  Weights_regions[profession_new$parentID == unique(profession_new$parentID)[i],    profession_new$parentID == unique(profession_new$parentID)[i]] <- 1
+}
+
+Weights_regions <- pmin(Weights_neighbours,Weights_regions)
+
+
+model_federal <- lmSLX(formula_base, profession_new, mat2listw(Weights_regions, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+model_ctrl_federal <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_regions, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+
+
+summary(model_federal)
+summary(model_ctrl_federal)
+
+```
+
+
+## Neighbourhood based on Buffer Sizes over all Cities
+Neighbourhood based on City weighted Buffers
+Neighbourhood based on Population weighted Buffers
+Neighbourhood based on KNN
+
+```{r warning=FALSE}
+library(dplyr)
+profession_new <- profession_new[!is.na(profession_new$OpenPositions),]
+#Create different Weights_prox No 1: proximity
+
+
+
+distances_quantiles <- distances_relevant %>% filter(dist !=0) %>% pull(dist) %>% quantile(probs = seq(0,1,0.1))
+public_quantiles <- distances_relevant%>% filter(dist !=0) %>% pull(public)  %>% quantile(probs = seq(0,1,0.1))
+driving_quantiles <- distances_relevant  %>% filter(dist !=0) %>% pull(driving) %>% quantile(probs = seq(0,1,0.1))
+
+best_model_val_distances_bin <- best_model_val_driving_bin <- best_model_val_public_bin <- best_model_ctrl_val_distances_bin <- best_model_ctrl_val_driving_bin <- best_model_ctrl_val_public_bin <- 0
+best_model_itt_distances_bin <- best_model_itt_driving_bin <- best_model_itt_public_bin <-best_model_ctrl_itt_distances_bin <- best_model_ctrl_itt_driving_bin <- best_model_ctrl_itt_public_bin <- 0
+best_model_distances_bin <- best_model_driving_bin <- best_model_public_bin <- best_model_ctrl_distances_bin <- best_model_ctrl_driving_bin <- best_model_ctrl_public_bin <- model_base
+
+best_Weights_distances_bin <- best_Weights_public_bin <- best_Weights_driving_bin <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+
+for(quant in 2:10)
+{
+  # Start with distances: Create reduced version
+  distances_relevant_test_dist <-  distances_relevant %>%  filter(dist <= distances_quantiles[quant]) %>% group_by(ABDistrict...3, ABDistrict...6) %>%  summarise(Weight=1)
+  
+  distances_relevant_test_public <-  distances_relevant %>%  filter(public <= public_quantiles[quant]) %>% group_by(ABDistrict...3, ABDistrict...6) %>%  summarise(Weight=1)
+  
+  distances_relevant_test_driving <-  distances_relevant %>%  filter(driving <= driving_quantiles[quant]) %>% group_by(ABDistrict...3, ABDistrict...6) %>%  summarise(Weight=1)
+  
+  Weights_distances_bin <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+  row.names(Weights_distances_bin)<- profession_new$region
+  colnames(Weights_distances_bin) <- profession_new$region
+  Weights_public_bin <- Weights_distances_bin
+  Weights_driving_bin <- Weights_distances_bin
+  
+  
+  for(i in 1:nrow(distances_relevant_test_dist))
+  {
+    Weights_distances_bin[row.names(Weights_distances_bin)==distances_relevant_test_dist$ABDistrict...3[i], colnames(Weights_distances_bin)==distances_relevant_test_dist$ABDistrict...6[i]]<- 1
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_driving))
+  {
+    Weights_driving_bin[row.names(Weights_driving_bin)==distances_relevant_test_driving$ABDistrict...3[i], colnames(Weights_driving_bin)==distances_relevant_test_driving$ABDistrict...6[i]]<- 1
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_public))
+  {
+    Weights_public_bin[row.names(Weights_public_bin)==distances_relevant_test_public$ABDistrict...3[i], colnames(Weights_public_bin)==distances_relevant_test_public$ABDistrict...6[i]]<- 1
+  }
+  
+  
+  model_spill_dist <- lmSLX(formula_base, profession_new, mat2listw(Weights_distances_bin, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+  model_spill_driving <- lmSLX(formula_base, profession_new, mat2listw(Weights_driving_bin, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+  model_spill_public <- lmSLX(formula_base, profession_new, mat2listw(Weights_public_bin, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+  
+  
+  model_ctrl_spill_dist <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_distances_bin, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+  model_ctrl_spill_driving <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_driving_bin, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+  model_ctrl_spill_public <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_public_bin, style="B"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1 )
+  
+  print(paste(logLik(model_spill_dist), logLik(model_spill_driving),  logLik(model_spill_public) ))
+  
+  
+  if(logLik(model_spill_dist)>best_model_val_distances_bin){
+    best_model_val_distances_bin <- logLik(model_spill_dist)
+    best_model_itt_distances_bin <- distances_quantiles[quant]
+    best_model_distances_bin <- model_spill_dist
+  }
+  
+  if(logLik(model_spill_driving)>best_model_val_driving_bin){
+    best_model_val_driving_bin <- logLik(model_spill_driving)
+    best_model_itt_driving_bin <- driving_quantiles[quant]
+    best_model_driving_bin <- model_spill_driving
+
+  }
+  
+  if(logLik(model_spill_public)>best_model_val_public_bin){
+    best_model_val_public_bin <- logLik(model_spill_public)
+    best_model_itt_public_bin <- public_quantiles[quant]
+    best_model_public_bin <- model_spill_public
+    
+
+  }
+  
+  if(logLik(model_ctrl_spill_dist)>best_model_ctrl_val_distances_bin){
+  best_model_ctrl_val_distances_bin <- logLik(model_ctrl_spill_dist)
+  best_model_ctrl_itt_distances_bin <- distances_quantiles[quant]
+  best_model_ctrl_distances_bin <- model_ctrl_spill_dist
+        best_Weights_distances_bin  <- Weights_distances_bin
+
+
+}
+
+if(logLik(model_ctrl_spill_driving)>best_model_ctrl_val_driving_bin){
+  best_model_ctrl_val_driving_bin <- logLik(model_ctrl_spill_driving)
+  best_model_ctrl_itt_driving_bin <- driving_quantiles[quant]
+  best_model_ctrl_driving_bin <- model_ctrl_spill_driving
+      best_Weights_driving_bin  <- Weights_driving_bin
+
+}
+
+if(logLik(model_ctrl_spill_public)>best_model_ctrl_val_public_bin){
+  best_model_ctrl_val_public_bin <- logLik(model_ctrl_spill_public)
+  best_model_ctrl_itt_public_bin <- public_quantiles[quant]
+  best_model_ctrl_public_bin <- model_ctrl_spill_public
+      best_Weights_public_bin  <- Weights_public_bin
+
+}
+}
+
+summary(best_model_ctrl_public_bin)
+```
+
+
+
+## Neighbourhood based on City weighted Buffers
+Neighbourhood based on Population weighted Buffers
+Neighbourhood based on KNN
+
+```{r warning=FALSE}
+
+distances_relevant_pop <- merge(distances_relevant,final, by.x="city...1",by.y="city")
+distances_relevant_pop <- merge(distances_relevant_pop,final,by.x="city...4",by.y="city")
+
+library(dplyr)
+profession_new <- profession_new[!is.na(profession_new$OpenPositions),]
+
+best_model_val_distances_num <- best_model_val_driving_num <- best_model_val_public_num <- best_model_ctrl_val_distances_num <- best_model_ctrl_val_driving_num <- best_model_ctrl_val_public_num <- 0
+best_model_itt_distances_num <- best_model_itt_driving_num <- best_model_itt_public_num <-best_model_ctrl_itt_distances_num <- best_model_ctrl_itt_driving_num <- best_model_ctrl_itt_public_num <- 0
+best_model_distances_num <- best_model_driving_num <- best_model_public_num <- best_model_ctrl_distances_num <- best_model_ctrl_driving_num <- best_model_ctrl_public_num <- model_base
+
+best_Weights_distances_num <- best_Weights_public_num <- best_Weights_driving_num <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+
+
+for(quant in 2:10)
+{
+  # Start with distances: Create reduced version 
+  # Update values
+quant <- 5
+  
+distances_relevant_test_dist <-  distances_relevant %>% group_by(ABDistrict...6) %>% mutate(district_b_n = n_distinct(city...4)) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(dist <= distances_quantiles[quant]) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(count=n_distinct(city...4), district_b_n = max(district_b_n), Weight=count/district_b_n, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+
+distances_relevant_test_public <-   distances_relevant %>% group_by(ABDistrict...6) %>% mutate(district_b_n = n_distinct(city...4)) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(public <= public_quantiles[quant]) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(count=n_distinct(city...4), district_b_n = max(district_b_n), Weight=count/district_b_n, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+  
+  distances_relevant_test_driving <-  distances_relevant %>% group_by(ABDistrict...6) %>% mutate(district_b_n = n_distinct(city...4)) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(driving <= driving_quantiles[quant]) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(count=n_distinct(city...4), district_b_n = max(district_b_n), Weight=count/district_b_n, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+  
+  
+  Weights_distances_num <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+  row.names(Weights_distances_num)<- profession_new$region
+  colnames(Weights_distances_num) <- profession_new$region
+  Weights_public_num <- Weights_distances_num
+  Weights_driving_num <- Weights_distances_num
+  
+  for(i in 1:nrow(distances_relevant_test_dist))
+  {
+    
+    Weights_distances_num[row.names(Weights_distances_num)==distances_relevant_test_dist$ABDistrict...3[i], colnames(Weights_distances_num)==distances_relevant_test_dist$ABDistrict...6[i]] <- distances_relevant_test_dist$Weight[i]
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_driving))
+  {
+    Weights_driving_num[row.names(Weights_driving_num)==distances_relevant_test_driving$ABDistrict...3[i], colnames(Weights_driving_num)==distances_relevant_test_driving$ABDistrict...6[i]]<- distances_relevant_test_driving$Weight[i]
+    
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_public))
+  {
+    Weights_public_num[row.names(Weights_public_num)==distances_relevant_test_public$ABDistrict...3[i], colnames(Weights_public_num)==distances_relevant_test_public$ABDistrict...6[i]]<- distances_relevant_test_public$Weight[i]
+  }
+  
+#  Weights_public_num <- pmin(Weights_neighbours,Weights_public_num)
+#  Weights_driving_num <- pmin(Weights_neighbours,Weights_driving_num)
+#  Weights_distances_num <- pmin(Weights_neighbours,Weights_distances_num)
+  Weights_distances_num <- Weights_distances_num/max(Weights_distances_num)
+  Weights_driving_num <- Weights_driving_num/max(Weights_driving_num)
+  Weights_public_num <- Weights_public_num/max(Weights_public_num)
+
+  model_spill_dist <- lmSLX(formula_base, profession_new, mat2listw(Weights_distances_num, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  logLik(model_spill_dist)
+  model_spill_driving <- lmSLX(formula_base, profession_new, mat2listw(Weights_driving_num, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_spill_public <- lmSLX(formula_base, profession_new, mat2listw(Weights_public_num, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  
+    model_ctrl_spill_dist <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_distances_num, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  logLik(model_spill_dist)
+  model_ctrl_spill_driving <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_driving_num, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_ctrl_spill_public <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_public_num, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  
+  
+#  print(paste(logLik(model_spill_dist), logLik(model_spill_driving),  logLik(model_spill_public) ))
+  
+  
+  if(logLik(model_spill_dist)>best_model_val_distances_num){
+    best_model_val_distances_num <- logLik(model_spill_dist)
+    best_model_itt_distances_num <- distances_quantiles[quant]
+    best_model_distances_num <- model_spill_dist
+    best_Weights_distances_num  <- Weights_distances_num
+
+  }
+  
+  if(logLik(model_spill_driving)>best_model_val_driving_num){
+    best_model_val_driving_num <- logLik(model_spill_driving)
+    best_model_itt_driving_num <- driving_quantiles[quant]
+    best_model_driving_num <- model_spill_driving
+      best_Weights_driving_num  <- Weights_driving_num
+
+  }
+  
+  if(logLik(model_spill_public)>best_model_val_public_num){
+    best_model_val_public_num <- logLik(model_spill_public)
+    best_model_itt_public_num <- public_quantiles[quant]
+    best_model_public_num <- model_spill_public
+      best_Weights_public_bin  <- Weights_public_bin
+
+  }
+  
+
+if(logLik(model_ctrl_spill_dist) > best_model_ctrl_val_distances_num){
+  best_model_ctrl_val_distances_num <- logLik(model_ctrl_spill_dist)
+  best_model_ctrl_itt_distances_num <- distances_quantiles[quant]
+  best_model_ctrl_distances_num <- model_ctrl_spill_dist
+}
+
+if(logLik(model_ctrl_spill_driving) > best_model_ctrl_val_driving_num){
+  best_model_ctrl_val_driving_num <- logLik(model_ctrl_spill_driving)
+  best_model_ctrl_itt_driving_num <- driving_quantiles[quant]
+  best_model_ctrl_driving_num <- model_ctrl_spill_driving
+}
+
+if(logLik(model_ctrl_spill_public) > best_model_ctrl_val_public_num){
+  best_model_ctrl_val_public_num <- logLik(model_ctrl_spill_public)
+  best_model_ctrl_itt_public_num <- public_quantiles[quant]
+  best_model_ctrl_public_num <- model_ctrl_spill_public
+}
+  
+}
+
+logLik(best_model_ctrl_public_num)
+
+#### stop
+```
+
+
+## Neighbourhood based on Population weighted Buffers
+Neighbourhood based on KNN
+
+```{r warning=FALSE}
+
+distances_relevant_pop <- merge(distances_relevant,final, by.x="city...1",by.y="city")
+distances_relevant_pop <- merge(distances_relevant_pop,final,by.x="city...4",by.y="city")
+
+library(dplyr)
+profession_new <- profession_new[!is.na(profession_new$OpenPositions),]
+
+best_model_val_distances_pop <- best_model_val_driving_pop <- best_model_val_public_pop <- 0
+best_model_itt_distances_pop <- best_model_itt_driving_pop <- best_model_itt_public_pop <- 0
+best_model_distances_pop <- best_model_driving_pop <- best_model_public_pop <- model_base
+
+best_model_ctrl_val_distances_pop <- best_model_ctrl_val_driving_pop <- best_model_ctrl_val_public_pop <- 0
+best_model_ctrl_itt_distances_pop <- best_model_ctrl_itt_driving_pop <- best_model_ctrl_itt_public_pop <- 0
+best_model_ctrl_distances_pop <- best_model_ctrl_driving_pop <- best_model_ctrl_public_pop <- model_base
+
+best_Weights_distances_pop <- best_Weights_public_pop <- best_Weights_driving_pop <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+
+for(quant in 2:10)
+{
+  # Start with distances: Create reduced version 
+  # Update values
+  
+distances_relevant_test_dist <-  distances_relevant_pop %>% group_by(ABDistrict...6) %>% mutate(district_pop = sum(unique(maxPopulation.y))) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(dist <= distances_quantiles[quant]) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(district_pop = max(district_pop), count= sum(unique(maxPopulation.y)), Weight=count/district_pop, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+
+distances_relevant_test_public <-  distances_relevant_pop %>% group_by(ABDistrict...6) %>% mutate(district_pop = sum(unique(maxPopulation.y))) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(public <= public_quantiles[quant]) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(district_pop = max(district_pop), count= sum(unique(maxPopulation.y)), Weight=count/district_pop, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+
+  distances_relevant_test_driving <-  distances_relevant_pop %>% group_by(ABDistrict...6) %>% mutate(district_pop = sum(unique(maxPopulation.y))) %>% ungroup %>% filter(ABDistrict...3 != ABDistrict...6)  %>%  filter(driving <= driving_quantiles[quant]) %>% group_by(city...1, ABDistrict...3, ABDistrict...6) %>%  summarise(district_pop = max(district_pop), count= sum(unique(maxPopulation.y)), Weight=count/district_pop, .groups="keep") %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(Weight=mean(Weight), .groups="keep")
+  
+  
+  Weights_distances_pop <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+  row.names(Weights_distances_pop)<- profession_new$region
+  colnames(Weights_distances_pop) <- profession_new$region
+  Weights_public_pop <- Weights_distances_pop
+  Weights_driving_pop <- Weights_distances_pop
+  
+  for(i in 1:nrow(distances_relevant_test_dist))
+  {
+    
+    Weights_distances_pop[row.names(Weights_distances_pop)==distances_relevant_test_dist$ABDistrict...3[i], colnames(Weights_distances_pop)==distances_relevant_test_dist$ABDistrict...6[i]] <- distances_relevant_test_dist$Weight[i]
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_driving))
+  {
+    Weights_driving_pop[row.names(Weights_driving_pop)==distances_relevant_test_driving$ABDistrict...3[i], colnames(Weights_driving_pop)==distances_relevant_test_driving$ABDistrict...6[i]]<- distances_relevant_test_driving$Weight[i]
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_public))
+  {
+    Weights_public_pop[row.names(Weights_public_pop)==distances_relevant_test_public$ABDistrict...3[i], colnames(Weights_public_pop)==distances_relevant_test_public$ABDistrict...6[i]]<- distances_relevant_test_public$Weight[i]
+  }
+  
+ # Weights_public_pop <- pmin(Weights_neighbours,Weights_public_pop)
+  #Weights_driving_pop <- pmin(Weights_neighbours,Weights_driving_pop)
+ # Weights_distances_pop <- pmin(Weights_neighbours,Weights_distances_pop)
+  Weights_distances_pop <- Weights_distances_pop/max(Weights_distances_pop)
+  Weights_driving_pop <- Weights_driving_pop/max(Weights_driving_pop)
+  Weights_public_pop <- Weights_public_pop/max(Weights_public_pop)
+  
+  model_spill_dist <- lmSLX(formula_base, profession_new, mat2listw(Weights_distances_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_spill_driving <- lmSLX(formula_base, profession_new, mat2listw(Weights_driving_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_spill_public <- lmSLX(formula_base, profession_new, mat2listw(Weights_public_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  
+ model_ctrl_spill_dist <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_distances_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+logLik(model_ctrl_spill_dist)
+model_ctrl_spill_driving <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_driving_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+model_ctrl_spill_public <- lmSLX(formula_ctrl, profession_new, mat2listw(Weights_public_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  
+#  print(paste(logLik(model_spill_dist), logLik(model_spill_driving),  logLik(model_spill_public) ))
+  
+
+if(logLik(model_spill_dist) > best_model_val_distances_pop){
+    best_model_val_distances_pop <- logLik(model_spill_dist)
+    best_model_itt_distances_pop <- distances_quantiles[quant]
+    best_model_distances_pop <- model_spill_dist
+
+}
+
+if(logLik(model_spill_driving) > best_model_val_driving_pop){
+    best_model_val_driving_pop <- logLik(model_spill_driving)
+    best_model_itt_driving_pop <- driving_quantiles[quant]
+    best_model_driving_pop <- model_spill_driving
+
+}
+
+if(logLik(model_spill_public) > best_model_val_public_pop){
+    best_model_val_public_pop <- logLik(model_spill_public)
+    best_model_itt_public_pop <- public_quantiles[quant]
+    best_model_public_pop <- model_spill_public
+}
+
+
+if(logLik(model_ctrl_spill_dist) > best_model_ctrl_val_distances_pop){
+    best_model_ctrl_val_distances_pop <- logLik(model_ctrl_spill_dist)
+    best_model_ctrl_itt_distances_pop <- distances_quantiles[quant]
+    best_model_ctrl_distances_pop <- model_ctrl_spill_dist
+    best_Weights_distances_pop  <- Weights_distances_pop
+
+}
+
+if(logLik(model_ctrl_spill_driving) > best_model_ctrl_val_driving_pop){
+    best_model_ctrl_val_driving_pop <- logLik(model_ctrl_spill_driving)
+    best_model_ctrl_itt_driving_pop <- driving_quantiles[quant]
+    best_model_ctrl_driving_pop <- model_ctrl_spill_driving
+     best_Weights_driving_pop  <- Weights_driving_pop
+
+}
+
+if(logLik(model_ctrl_spill_public) > best_model_ctrl_val_public_pop){
+    best_model_ctrl_val_public_pop <- logLik(model_ctrl_spill_public)
+    best_model_ctrl_itt_public_pop <- public_quantiles[quant]
+    best_model_ctrl_public_pop <- model_ctrl_spill_public
+    best_Weights_public_pop  <- Weights_public_pop
+
+}
+}
+
+
+logLik(best_model_ctrl_public_pop)
+
+```
+
+# 
+
+```{r warning=FALSE}
+ ##### Compute all regions population as discrit population. For each City: Compute average distance to each other region (by weighting over population in listed connections)
+
+distances_relevant_test_dist <- distances_relevant_pop  %>%  filter(ABDistrict...3 != ABDistrict...6) %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(dist=1000/sum(dist*maxPopulation.y*maxPopulation.x/sum(unique(maxPopulation.x))/sum(unique(maxPopulation.y))), .groups="keep") 
+
+distances_relevant_test_driving <- distances_relevant_pop  %>%  filter(ABDistrict...3 != ABDistrict...6) %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(dist=1/sum(driving*maxPopulation.y*maxPopulation.x/sum(unique(maxPopulation.x))/sum(unique(maxPopulation.y))), .groups="keep") 
+
+distances_relevant_test_public <- distances_relevant_pop  %>%  filter(ABDistrict...3 != ABDistrict...6) %>% group_by(ABDistrict...3, ABDistrict...6) %>% summarise(dist=1/sum(public*maxPopulation.y*maxPopulation.x/sum(unique(maxPopulation.x))/sum(unique(maxPopulation.y))), .groups="keep") 
+
+
+Weights_inv_distances_pop <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+  row.names(Weights_inv_distances_pop)<- profession_new$region
+  colnames(Weights_inv_distances_pop) <- profession_new$region
+  Weights_inv_public_pop <- Weights_inv_distances_pop
+  Weights_inv_driving_pop <- Weights_inv_distances_pop
+  
+for(i in 1:nrow(distances_relevant_test_dist))
+  {
+    
+    Weights_inv_distances_pop[row.names( Weights_inv_distances_pop)==distances_relevant_test_dist$ABDistrict...3[i], colnames( Weights_inv_distances_pop)==distances_relevant_test_dist$ABDistrict...6[i]] <- distances_relevant_test_dist$dist[i]
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_driving))
+  {
+    Weights_inv_driving_pop[row.names( Weights_inv_driving_pop)==distances_relevant_test_driving$ABDistrict...3[i], colnames( Weights_inv_driving_pop)==distances_relevant_test_driving$ABDistrict...6[i]]<- distances_relevant_test_driving$dist[i]
+  }
+  
+  for(i in 1:nrow(distances_relevant_test_public))
+  {
+     Weights_inv_public_pop[row.names( Weights_inv_public_pop)==distances_relevant_test_public$ABDistrict...3[i], colnames( Weights_inv_public_pop)==distances_relevant_test_public$ABDistrict...6[i]]<- distances_relevant_test_public$dist[i]
+  }
+  
+ Weights_inv_distances_pop<- Weights_inv_distances_pop / max(Weights_inv_distances_pop)
+ Weights_inv_driving_pop<- Weights_inv_driving_pop / max(Weights_inv_driving_pop)
+ Weights_inv_public_pop<- Weights_inv_public_pop / max(Weights_inv_public_pop)
+  ####
+
+ model_spill_inv_dist <- lmSLX(formula_base, profession_new, mat2listw( Weights_inv_distances_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_spill_inv_driving <- lmSLX(formula_base, profession_new, mat2listw( Weights_inv_driving_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_spill_inv_public <- lmSLX(formula_base, profession_new, mat2listw( Weights_inv_public_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+     model_ctrl_spill_inv_dist <- lmSLX(formula_ctrl, profession_new, mat2listw( Weights_inv_distances_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_ctrl_spill_inv_driving <- lmSLX(formula_ctrl, profession_new, mat2listw( Weights_inv_driving_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+  model_ctrl_spill_inv_public <- lmSLX(formula_ctrl, profession_new, mat2listw( Weights_inv_public_pop, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+
+```
+
+## Compute Inverse Distance Matrix based on  Shapefile
+```{r warning=FALSE}
+centroids <- st_centroid(st_as_sf(profession$geometry.x))
+# Extract coordinates of centroids
+coords <- st_coordinates(centroids)
+
+# Calculate the distance matrix between centroids
+dist_matrix <- sp::spDists(as.matrix(coords), longlat = TRUE)
+colnames(dist_matrix) <- profession$region
+row.names(dist_matrix) <- profession$region
+
+best_model_val_inv_dist <- 0
+best_model_itt_inv_dist <- 0
+best_model_ctrl_spill_inv_cent_dist <- NULL
+best_model_spill_inv_cent_dist <- NULL
+Weights_inv_dist_matrix <- NULL
+
+for(dcap in seq(0.001, 0.02, by=0.001)){
+# Calculate the inverse of the distances, handling zero distances to avoid division by zero
+inv_dist_matrix <- 1 / dist_matrix 
+inv_dist_matrix[is.infinite(inv_dist_matrix)] <- 0
+inv_dist_matrix[inv_dist_matrix <= dcap] <- 0
+inv_dist_matrix <- inv_dist_matrix/max(inv_dist_matrix)
+
+# If you need to create a weights list for spatial analysis
+
+model_ctrl_spill_inv_cent_dist <- lmSLX(formula_ctrl, profession_new, mat2listw(inv_dist_matrix, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+model_spill_inv_cent_dist <- lmSLX(formula_base, profession_new, mat2listw(inv_dist_matrix, style="M"), na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+if(logLik(model_spill_inv_cent_dist) > best_model_val_inv_dist)
+  best_model_itt_inv_dist <- 1/dcap
+  best_model_val_inv_dist <- logLik(model_spill_inv_cent_dist)
+  best_model_ctrl_spill_inv_cent_dist <- model_ctrl_spill_inv_cent_dist
+  best_model_spill_inv_cent_dist <- model_spill_inv_cent_dist
+  Weights_inv_dist_matrix <- inv_dist_matrix
+}
+
+model_ctrl_spill_inv_cent_dist <- best_model_ctrl_spill_inv_cent_dist
+model_spill_inv_cent_dist <-  best_model_spill_inv_cent_dist
+```
+
+
+
+## Comuter Based Weights
+```{r warning=FALSE}
+
+
+# VET Inbound Commuters
+Weights_commuters_inbound <- matrix(0, nrow=nrow(profession_new), ncol=nrow(profession_new))
+  row.names(Weights_commuters_inbound)<- profession_new$region
+  colnames(Weights_commuters_inbound) <- profession_new$region
+  Weights_commuters_outbound <- Weights_commuters_inbound
+  Weights_commuters_inbound_norm <- Weights_commuters_inbound
+
+
+commuters_inbound_VET <- commuters_inbound[,c(1:4,10)] %>% filter(grepl("^\\d{5}$", `Regionalschlüssel...4`))
+commuters_inbound_VET$Regionalschlüssel...2 <- as.integer(commuters_inbound_VET$Regionalschlüssel...2)
+commuters_inbound_VET$Regionalschlüssel...4 <- as.integer(commuters_inbound_VET$Regionalschlüssel...4)
+
+commuters_inbound_VET <- merge(commuters_inbound_VET,Tabelle_Kreise_AB, by.x="Regionalschlüssel...2", by.y="key")
+commuters_inbound_VET <- merge(commuters_inbound_VET,Tabelle_Kreise_AB, by.x="Regionalschlüssel...4", by.y="key")
+
+commuters_inbound_AB  <- commuters_inbound_VET %>% filter(ABDistrict.x != ABDistrict.y) %>% group_by(ABDistrict.x,ABDistrict.y) %>% summarise(sum=sum(Auszubildende),.groups="keep")
+
+  
+for(i in 1:nrow(commuters_inbound_AB))
+  {
+    Weights_commuters_inbound[row.names(Weights_commuters_inbound)==commuters_inbound_AB$ABDistrict.x[i], colnames( Weights_commuters_inbound)==commuters_inbound_AB$ABDistrict.y[i]] <- commuters_inbound_AB$sum[i]
+  }
+
+max(Weights_commuters_inbound)
+Weights_commuters_inbound <- Weights_commuters_inbound /max(Weights_commuters_inbound)
+
+Weights_commuters_inbound <- mat2listw(Weights_commuters_inbound, style="M")
+
+model_ctrl_spill_inbound <- lmSLX(formula_ctrl, profession_new, Weights_commuters_inbound, na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+model_spill_inbound <- lmSLX(formula_base, profession_new, Weights_commuters_inbound, na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+Weights_commuters_inbound <- listw2mat(Weights_commuters_inbound)
+max(Weights_commuters_inbound)
+```
+
+
+```{r warning=FALSE}
+
+# Normal Commuters
+commuters_inbound_VET_norm <- commuters_inbound[,c(1:4,5)] %>% filter(grepl("^\\d{5}$", `Regionalschlüssel...4`))
+commuters_inbound_VET_norm$Regionalschlüssel...2 <- as.integer(commuters_inbound_VET_norm$Regionalschlüssel...2)
+commuters_inbound_VET_norm$Regionalschlüssel...4 <- as.integer(commuters_inbound_VET_norm$Regionalschlüssel...4)
+
+commuters_inbound_VET_norm <- merge(commuters_inbound_VET_norm,Tabelle_Kreise_AB, by.x="Regionalschlüssel...2", by.y="key")
+commuters_inbound_VET_norm <- merge(commuters_inbound_VET_norm,Tabelle_Kreise_AB, by.x="Regionalschlüssel...4", by.y="key")
+
+commuters_inbound_AB_norm  <- commuters_inbound_VET_norm %>% filter(ABDistrict.x != ABDistrict.y) %>% group_by(ABDistrict.x,ABDistrict.y) %>% summarise(sum=sum(Insgesamt),.groups="keep")
+
+
+for(i in 1:nrow(commuters_inbound_AB))
+  {
+    
+    Weights_commuters_inbound_norm[row.names(Weights_commuters_inbound_norm)==commuters_inbound_AB_norm$ABDistrict.x[i], colnames( Weights_commuters_inbound_norm)==commuters_inbound_AB_norm$ABDistrict.y[i]] <- commuters_inbound_AB_norm$sum[i]
+  }
+  
+
+Weights_commuters_inbound_norm <- Weights_commuters_inbound_norm /  max(Weights_commuters_inbound_norm)
+Weights_commuters_inbound_norm <- mat2listw(Weights_commuters_inbound_norm, style="M")
+
+model_ctrl_spill_inbound_norm <- lmSLX(formula_ctrl, profession_new, Weights_commuters_inbound_norm, na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+model_spill_inbound_norm <- lmSLX(formula_base, profession_new, Weights_commuters_inbound_norm, na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+Weights_commuters_inbound_norm <- listw2mat(Weights_commuters_inbound_norm)
+max(Weights_commuters_inbound_norm)
+
+
+
+# VET Outbound commuters
+commuters_outbound_VET <- commuters_outbound[,c(1:4,10)] %>% filter(grepl("^\\d{5}$", `Regionalschlüssel...4`))
+commuters_outbound_VET$Regionalschlüssel...2 <- as.integer(commuters_outbound_VET$Regionalschlüssel...2)
+commuters_outbound_VET$Regionalschlüssel...4 <- as.integer(commuters_outbound_VET$Regionalschlüssel...4)
+
+commuters_outbound_VET <- merge(commuters_outbound_VET,Tabelle_Kreise_AB, by.x="Regionalschlüssel...2", by.y="key")
+commuters_outbound_VET <- merge(commuters_outbound_VET,Tabelle_Kreise_AB, by.x="Regionalschlüssel...4", by.y="key")
+
+commuters_outbound_AB  <- commuters_outbound_VET %>% filter(ABDistrict.x != ABDistrict.y) %>% group_by(ABDistrict.x,ABDistrict.y) %>% summarise(sum=sum(Auszubildende),.groups="keep")
+
+for(i in 1:nrow(commuters_outbound_AB)) {
+    Weights_commuters_outbound[row.names(Weights_commuters_outbound)==commuters_outbound_AB$ABDistrict.x[i], colnames(Weights_commuters_outbound)==commuters_outbound_AB$ABDistrict.y[i]] <- commuters_outbound_AB$sum[i]
+}
+
+max(Weights_commuters_outbound)
+Weights_commuters_outbound <- Weights_commuters_outbound / max(Weights_commuters_outbound)
+
+Weights_commuters_outbound <- mat2listw(Weights_commuters_outbound, style="M")
+
+model_ctrl_spill_outbound <- lmSLX(formula_ctrl, profession_new, Weights_commuters_outbound, na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+model_spill_outbound <- lmSLX(formula_base, profession_new, Weights_commuters_outbound, na.action=na.exclude ,zero.policy = TRUE, Durbin=~ U + V  -1)
+
+Weights_commuters_outbound <- listw2mat(Weights_commuters_outbound)
+max(Weights_commuters_outbound)
+```
+
+
+# Create Output 
+
+```{r}
+library(huxtable)
+library(formula.tools)
+library(jtools)
+
+create_table <- function(model_list, model_names) {
+  export_summs(
+    model_list, 
+    model.names = model_names, 
+    stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05, `^` = 0.1), 
+    number_format = "%.3f", 
+    statistics = c("logLik","AIC","BIC","N. obs." = "nobs")
+  ) %>%
+    set_font_size(10) %>% 
+    set_tb_padding(1) %>% 
+    set_italic(final(1), 1)
+}
+ 
+spill_model_names <- c("BASE","W-N-1", "W-N-2", "W-N-DIST", "W-N-DRIVE", "W-N-PUB", "W-FUNC",  "W-COM-VET-I", "W-COM-VET-O", "W-INV-CENT", "W-INV-DIST","W-INV-DRIVE", "W-INV-PUB", "W-POP-DIST", "W-POP-DRIVE", "W-POP-PUB")
+
+model_list <- list(model_base,model_neighbour_1,model_neighbour_2, best_model_distances_bin, best_model_driving_bin,best_model_public_bin, model_functional,
+                    model_spill_inbound, model_spill_outbound, model_spill_inv_cent_dist, model_spill_inv_dist,model_spill_inv_driving,model_spill_inv_public,
+                   best_model_distances_pop, best_model_driving_pop, best_model_public_pop)
+
+model_ctrl_list <- list(model_ctrl, model_ctrl_neighbour_1, model_ctrl_neighbour_2, best_model_ctrl_distances_bin, best_model_ctrl_driving_bin, best_model_ctrl_public_bin, model_ctrl_functional,
+                    model_ctrl_spill_inbound, model_ctrl_spill_outbound, model_ctrl_spill_inv_cent_dist, model_ctrl_spill_inv_dist, model_ctrl_spill_inv_driving, model_ctrl_spill_inv_public,
+                   best_model_ctrl_distances_pop, best_model_ctrl_driving_pop, best_model_ctrl_public_pop)
+
+
+table <- create_table(model_list,spill_model_names) %>%
+  set_caption(paste0("<p align='left'><b>Profession: </b> ", profession_selected,
+                     "<br> <b>Regression: </b>",  target,"<br><br>",
+                     "<br> <b>Best Distances:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b>", round(best_model_ctrl_itt_distances_bin/1000,2), "/", round(best_model_ctrl_itt_distances_pop/1000,2)  ,
+                     "<br> <b>Best Car Transport Times: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b>", round(best_model_ctrl_itt_driving_bin,2), "/", round(best_model_ctrl_itt_driving_pop,2)  ,
+                     "<br> <b>Best Public Transport Times &nbsp;&nbsp;</b>", round(best_model_ctrl_itt_public_bin,2), "/", round(best_model_ctrl_itt_public_pop,2)  ,
+
+  "</p><br>")) %>% 
+  set_caption_pos("top") 
+
+
+table_ctrl <- create_table(model_ctrl_list,spill_model_names) %>%
+  set_caption(paste0("<p align='left'><b>Profession: </b> ", profession_selected,
+                     "<br> <b>Regression: </b>",  target,"<br><br>",
+                     "<br> <b>Best Distances:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b>", round(best_model_ctrl_itt_distances_bin/1000,2), "/", round(best_model_ctrl_itt_distances_pop/1000,2)  ,
+                     "<br> <b>Best Car Transport Times: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</b>", round(best_model_ctrl_itt_driving_bin,2), "/", round(best_model_ctrl_itt_driving_pop,2)  ,
+                     "<br> <b>Best Public Transport Times &nbsp;&nbsp;</b>", round(best_model_ctrl_itt_public_bin,2), "/", round(best_model_ctrl_itt_public_pop,2)  ,
+  "</p><br>")) %>% 
+  set_caption_pos("top") 
+
+table %>% quick_html(file=paste0("./Outputs/Regressions/",profession_selected,target,"Controls.html"))
+table_ctrl %>% quick_html(file=paste0("./Outputs/Regressions/",profession_selected,target,"ControlsSpillover.html"))
+
+impacts(best_model_public_pop)
+
+```
+
+
+# Compute regional efficiency based on weighting
+
+```{r fig.height=16, fig.width=12}
+
+estimate_vector<- best_model_ctrl_public_pop$coefficients[-c(2,3,8,9)] 
+estimate_values <- as.matrix(cbind("(Intercept)"=1, st_drop_geometry(profession_new[,names(estimate_vector[-1])])))
+profession$Efficiency <- exp(estimate_values %*% estimate_vector)
+
+map_efficiency <- ggplot() + 
+  geom_sf(data=st_as_sf(profession), aes(fill = Efficiency))+
+  
+  theme(legend.text.align = 1) +
+  labs(fill = "Efficiency") +
+  guides(
+    fill = guide_colorbar(direction = "horizontal", title.position="top", barwidth = 20,  # Adjust this value to change the width of the colorbar
+      barheight = 1  ), 
+# Adjust rows for the fill legend
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 18, face="bold"),
+    legend.box = "horizontal",
+    legend.box.just = "center",
+    legend.spacing.x = unit(0.5, "cm") 
+  )
+  #labs(shape = "Bevölkerung ", fill = "Defizit an Auszubildenden") +
+ # scale_fill_gradient2(high = "#96c11f", low = "#003268", mid = "white") 
+
+map_efficiency  + scale_fill_gradientn(colors = custom_colors(100), na.value="#e4e4e4")
+```
+
+
+# Compute Correlation for Weighing matrices
+
+```{r}
+all_vars <- ls()
+# Filter variable names that match the pattern
+matching_vars <- grep("Weights", all_vars, value = TRUE)
+
+matrices <- list()
+
+# Loop through matching variables and add them to the list if they are matrices
+for (var in matching_vars) {
+  mat <- get(var)
+  if (is.matrix(mat)) {
+    matrices[[var]] <- as.vector(mat)
+  }
+}
+
+matrices_data <- as.data.frame(matrices)
+
+# Filter all Rows that only contain 0s
+matrices_data <- matrices_data[rowSums(matrices_data != 0) > 0, ]
+
+
+spill_data <-
+  matrices_data[, c(
+    "Weights_neighbour_1",
+    "Weights_neighbour_2",
+    "best_Weights_distances_bin",
+    "best_Weights_driving_bin",
+    "best_Weights_public_bin",
+    "Weights_functional",
+    "Weights_commuters_inbound",
+    "Weights_commuters_outbound",
+    "Weights_inv_dist_matrix",
+    "Weights_inv_distances_pop",
+    "Weights_inv_driving_pop",
+    "Weights_inv_public_pop",
+    "best_Weights_distances_pop",
+    "best_Weights_driving_pop",
+    "best_Weights_public_pop"
+  )]
+
+  
+colnames(spill_data)<-spill_model_names[-1]
+
+
+# Step 3: Create a correlation matrix
+cor_matrix <- cor(spill_data, use = "pairwise.complete.obs")
+row.names(cor_matrix) <- spill_model_names[-1]
+colnames(cor_matrix) <- spill_model_names[-1]
+avg_cor <- rowMeans(abs(cor_matrix))
+
+# Step 5: Sort the variables based on the average correlation
+sorted_indices <- order(avg_cor, decreasing = TRUE)
+sorted_cor_matrix <- cor_matrix[sorted_indices, sorted_indices]
+
+library(corrplot)
+
+#custom_names <- c("CustomName1", "CustomName2", "CustomName3")  # Update with your custom names
+#custom_names_sorted <- custom_names[sorted_indices]
+#names(sorted_cor_matrix) <- custom_names_sorted
+#colnames(sorted_cor_matrix) <- custom_names_sorted
+#rownames(sorted_cor_matrix) <- custom_names_sorted
+
+# Step 6: Create the corplot
+corrplot(sorted_cor_matrix, method = "circle", type = "full", tl.col = "black", tl.srt = 45, col=rev(custom_colors(100)))
+
+```
+
+```{r warning=FALSE}
+calculate_nonzero_stats <- function(x, name) {
+  nonzero_x <- x[x != 0]
+  stats <- data.frame(
+    Variable = name,
+    NonZeroCount = sum(x != 0),
+    MinNonZero = ifelse(length(nonzero_x) > 0, min(nonzero_x, na.rm = TRUE), NA),
+    MaxNonZero = ifelse(length(nonzero_x) > 0, max(nonzero_x, na.rm = TRUE), NA),
+    MeanNonZero = ifelse(length(nonzero_x) > 0, mean(nonzero_x, na.rm = TRUE), NA),
+    Q1NonZero = ifelse(length(nonzero_x) > 0, quantile(nonzero_x, 0.25, na.rm = TRUE), NA),
+    MedianNonZero = ifelse(length(nonzero_x) > 0, quantile(nonzero_x, 0.5, na.rm = TRUE), NA),
+    Q3NonZero = ifelse(length(nonzero_x) > 0, quantile(nonzero_x, 0.75, na.rm = TRUE), NA)
+  )
+  return(stats)
+}
+
+# Calculate statistics for each column and bind the results into a single data frame
+new_df_stats <- bind_rows(lapply(names(spill_data), function(name) {
+  calculate_nonzero_stats(spill_data[[name]], name)
+}))
+
+new_df_stats_sorted <- new_df_stats 
+
+colnames(new_df_stats_sorted) <- c("Variable", "Non-Zero Count", "Min (Non-Zero)", "Max (Non-Zero)", "Mean (Non-Zero)", "Q1 (Non-Zero)", "Median (Non-Zero)", "Q3 (Non-Zero)")
+
+
+new_df_stats_sorted$Name <- c("Neighbours D1", 
+                 "Neighbours D2", 
+                 "Dist Neighbour", 
+                 "Car Neighbour", 
+                 "Public Neighbour", 
+                 "Functional Regions", 
+                 "VET Commuters In", 
+                 "VET Commuters Out", 
+                 "Inv. Cent. Distance", 
+                 "Inv. Distance", 
+                 "Inv. Car", 
+                 "Inv. Public", 
+                 "Dist Population", 
+                 "Car Population", 
+                 "Public Population")
+
+
+new_df_stats_sorted$Description <- c(
+
+"Binary Weighting for Neighbourhoods of degree 1.",
+"Binary Weighting for Neighbourhoods of degree 2.",
+"Binary Weighting for regions that have at least one town within a fixed buffer of 40 km in distance.",
+"Binary Weighting for regions that have at least one town within a fixed buffer of 42 minutes of commuting by car.",
+"Binary Weighting for regions that have at least one town within a fixed buffer of 51 minutes of commuting by public transport.",
+"Binary Indicator of whether two regions share the same functional region.",
+"Inward Commuters participating in VET.",
+"Outward Commuters participating in VET.",
+"Inverse of Centroid Distance.",
+"Inverse of average distance between cities.",
+"Inverse of average driving times between cities.",
+"Inverse of average commuting times by public transport between cities.",
+"Share of the population that can be reached by an average citizen within 20 km.",
+"Share of the population that can be reached by an average citizen within 25 minutes of driving.",
+"Share of the population that can be reached by an average citizen within 59 minutes of commuting by public transport."
+)
+
+
+new_df_stats_sorted <- new_df_stats_sorted[,c(1,9,10,2:8)]
+
+ht <- as_hux(new_df_stats_sorted)
+
+# Properly name the columns
+
+ht <- ht %>%
+  set_all_borders(value = 1) %>%
+  set_all_border_colors(value = "black") %>%
+  set_all_border_styles(value = "solid") %>%
+  # set_background_color(even = TRUE, everywhere = TRUE, value = "lightgray") %>%
+  set_background_color(row = 1, value = "lightgray") %>%
+  set_background_color(col = 1, value = "lightgray") %>%
+  set_header_rows(1, TRUE) %>%
+  set_header_cols(1, TRUE) %>%
+  set_wrap(col = 1, value = FALSE)
+
+# Add light gray lines between rows and columns
+# Display the huxtable as HTML
+ht %>% quick_html(file = paste0("./Outputs/Regressions/OutputStatisticsWeights.html"))
+
+Weights_commuters_outbound<- mat2listw(Weights_commuters_outbound, style="M")
+best_Weights_distances_pop <- mat2listw(best_Weights_distances_pop, style="M")
+best_Weights_public_pop_mat <- best_Weights_public_pop # Only required for Script 4_Profession Based
+best_Weights_public_pop <- mat2listw(best_Weights_public_pop, style="M")
+save(best_Weights_public_pop, best_Weights_public_pop_mat,  best_Weights_distances_pop, Weights_commuters_outbound, file = "./DataBackups/weights_data.RData")
+
+```
