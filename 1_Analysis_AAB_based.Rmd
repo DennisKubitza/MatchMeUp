@@ -1,0 +1,1089 @@
+---
+title: "Analyis"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+# 📜Configuration of Script
+
+This initial code chunk serves as the main configuration panel for the entire analysis. It starts by clearing the environment to ensure a clean session. The most important step here is selecting which professional group to analyze from the `local_names` vector. The results of the entire script will be specific to this selection.
+
+```{r}
+library(sf)
+
+# Clear all objects from the current R session to ensure a clean start.
+rm(list=ls())
+
+local_names <- c("machine and vehicle technology professions","medical health professions" ,                      
+"professions in business management and organization","mechatronics, energy, and electrical professions" ,  
+ "sales professions","all professions" )      
+
+### Which profession should be analyzed? ###
+profession_selected =  local_names[6]
+
+```
+
+
+# Consolidate driving tims between cities
+This section merges several datasets containing driving and public transport times between cities. These data were collected at different stages of the project. This consolidation step creates a single, comprehensive data frame (distances_relevant) with the most up-to-date travel times.
+
+Note for replication: If you were to re-collect the travel time data from scratch, this manual merging process would not be necessary. You could proceed directly with your single, clean dataset.
+
+```{r}
+# Load the main prepared dataset, which includes the list of relevant city pairs.
+load(file="./DataBackups/newest_prepared_data.Rdata")
+distances_important <- distances_relevant
+
+# Load various distance/time files collected at different times.
+load("./DataBackups/distances_AB_2023.Rdata")
+distances_new <- distances_relevant 
+distances_new$commuting=distances_new$driving_nov
+distances_new$driving= distances_new$commuting_nov
+
+column_names <- colnames(distances_new)
+load("./DataBackups/distances_AB_with_times_november.Rdata")
+distances_nov <- distances_relevant
+
+load("./DataBackups/distances.RData")
+distances_july <- distances_relevant
+
+# Combine the different data sources into one data frame.
+# Use the minimum time from the different sources, assuming the fastest route is the most relevant.
+distances_relevant <- distances_july
+distances_relevant$commuting_nov <- distances_nov$commuting_nov
+distances_relevant$driving_nov <- distances_nov$driving_nov
+distances_relevant <- distances_relevant[,column_names]
+distances_relevant <- rbind(distances_relevant, distances_new)
+distances_relevant$commuting_jul <- distances_relevant$commuting
+distances_relevant$driving_jul <- distances_relevant$driving
+distances_relevant$commuting <- pmin(distances_relevant$commuting_jul,distances_relevant$commuting_nov)
+distances_relevant$driving <- pmin(distances_relevant$driving_jul,distances_relevant$driving_nov)
+
+# Cap commuting time at a maximum of twice the driving time as a plausibility check.
+distances_relevant$commuting[distances_relevant$commuting > 2*distances_relevant$driving]<- 2*distances_relevant$driving[distances_relevant$commuting > 2*distances_relevant$driving]
+
+# Clean up and merge with the main city pair data.
+distances_relevant <- distances_relevant[,c(1,4,8:13)]
+distances_relevant <- merge(distances_important, distances_relevant, by=c("city...1","city...4"))
+distances_relevant<-distances_relevant[,c(1,3,4,2,5,6,7:13)]
+names(distances_relevant)[10] <- "public"
+
+library(dplyr)
+library(sfheaders)
+
+# Calculate distance ranks and filter to ensure all cities and districts are in the final dataset.
+distances_relevant <- distances_relevant %>% group_by(city...1) %>% arrange(-dist) %>% mutate(rank=rank(dist))
+distances_relevant <- distances_relevant %>% filter(city...1 %in% final$city) %>% filter(city...4 %in% final$city)
+distances_relevant <- distances_relevant %>% filter(ABDistrict...3 %in% final$ABDistrict) %>% filter(ABDistrict...6 %in% final$ABDistrict)
+
+
+rm(list=c("distances_new","distances_july","distances_nov","distances_important"))
+```
+
+For some calculations, it is necessary to have a "distance to self" entry for each city (i.e., a distance of zero). This chunk creates these self-referential rows and adds them to the main distance data frame.
+
+```{r}
+# Create a data frame of self-to-self city pairs with zero distance/time.
+distances_relevant_self <- unique(cbind(distances_relevant[,1:3],distances_relevant[,1:3],0,0,0,0,0,0,0,0))
+distances_relevant_self <- distances_relevant_self[!duplicated(distances_relevant_self[,1:3]),]
+colnames(distances_relevant_self) <- colnames(distances_relevant)
+distances_relevant <- rbind(distances_relevant_self, distances_relevant)
+
+```
+
+
+# Descriptive Statistics
+
+This section prepares the final analysis dataset by merging regional indicators and then explores the relationships between these variables through correlation plots and maps.
+
+## Merge Regional Data
+
+The regional indicators are originally at the administrative district (Kreise) level. This chunk aggregates them up to the labor agency district (AB-District) level using population-weighted averages to match the main dataset.
+
+```{r}
+#### Calculate Dataset for evaluation
+library(sfheaders)
+library(corrplot)
+
+
+Professions <- unique(data$Profession)
+Professions
+Tabelle_Kreise$Kennziffer<-as.integer(Tabelle_Kreise$Kennziffer)
+profession <- as.data.frame(data)[,1:16]
+profession_test <- profession[!is.na(profession$OpenPositions),]
+
+# Aggregate the regional indicators from administrative to labor agency district level.
+# Most variables are aggregated using a population-weighted mean.
+
+Tabelle_Kreise$area_share <- 1/(Tabelle_Kreise$density ) * Tabelle_Kreise$`Bevölkerung gesamt_2022`
+Tabelle_Kreise_AB <- final %>% group_by(key) %>% as.data.frame() %>% select(key,ABDistrict) %>% unique()
+Tabelle_Kreise <- merge(Tabelle_Kreise, Tabelle_Kreise_AB, by.x="Kennziffer", by.y="key")
+
+Tabelle_Kreise$share_traffic <- Tabelle_Kreise$share_trafic
+# Recalculate from adminstrative districts to Labour Agency districts
+
+Tabelle_AB <- Tabelle_Kreise %>% mutate(inhabitants = `Bevölkerung gesamt_2022`) %>% group_by(ABDistrict) %>%
+  summarize(unemp25 = sum(`Arbeitslosenquote Jüngere`*inhabitants)/sum(inhabitants),
+         bigCo = sum(bigCo*inhabitants)/sum(inhabitants),
+         cohort = sum(cohort*inhabitants)/sum(inhabitants),
+         cons = sum(cons*inhabitants)/sum(inhabitants),
+         gdp = sum(gdp*inhabitants)/sum(inhabitants),
+         income = sum(income*inhabitants)/sum(inhabitants),
+         medCo = sum(medCo*inhabitants)/sum(inhabitants),
+         density = sum(density*area_share)/sum(area_share),
+         cars = sum(cars*inhabitants)/sum(inhabitants),
+         shareVET = sum(shareVET*inhabitants)/(sum(inhabitants)),
+         shareUNI = sum(shareUNI*inhabitants)/(sum(inhabitants)),
+         medSE = sum(medSE*inhabitants)/(sum(inhabitants)),
+         lowSE = sum(lowSE*inhabitants)/(sum(inhabitants)),
+         highSE = sum(as.numeric(highSE)*inhabitants)/sum(inhabitants),
+         urban_permeation=sum(urban_permeation*area_share)/sum(area_share),
+         area_share = sum(area_share),
+         share_traffic = sum(share_traffic*area_share)/sum(area_share),
+         inhabitants = sum(inhabitants/1000),
+         num_ram = n_distinct(ram),
+         rams = paste0(unique(ram), collapse = ";")
+         )
+
+# Merge the aggregated regional data into the main profession data frame.
+profession <- merge(profession,Tabelle_AB, by.x="region", by.y="ABDistrict" )
+```
+
+
+## Explore Correlations of Regional Indicators
+
+These chunks generate correlation matrices to check for multicollinearity among the regional control variables. This is an important step to inform model specification and avoid including highly correlated predictors in the same regression.
+
+
+```{r fig.height=9, fig.width=9}
+
+cormatrix=cor(profession[,c(17:35)], use="complete")
+corrplot(cormatrix, method="number")
+#print(cormatrix)
+
+print(cormatrix[rowSums(abs(cormatrix)>0.5)>1,colSums(abs(cormatrix)>0.5)>1])
+####################################################################################
+
+
+#Create a combined variable for medium and big companies.
+profession$mbCo <- profession$medCo + profession$bigCo
+#profession <- profession %>% select(-c(medCo,bigCo))
+print(cormatrix[rowSums(abs(cormatrix)>0.6)>1,colSums(abs(cormatrix)>0.6)>1])
+```
+
+
+```{r fig.height=9, fig.width=9}
+# Calculate a correlation matrix for a selected subset of variables.
+cormatrix=cor(profession[,c(17,20,26,28,30)], use="complete")
+corrplot(cormatrix, method="number")
+#print(cormatrix)
+
+print(cormatrix[rowSums(abs(cormatrix)>0.5)>1,colSums(abs(cormatrix)>0.5)>1])
+####################################################################################
+
+#profession <- profession %>% select(-c(shareUNI,shareVET))
+profession$mbCo <- profession$medCo + profession$bigCo
+#profession <- profession %>% select(-c(medCo,bigCo))
+print(cormatrix[rowSums(abs(cormatrix)>0.6)>1,colSums(abs(cormatrix)>0.6)>1])
+```
+
+## Visualize Commuting vs. Driving Times
+This map provides a visual exploration of the travel time data. It plots connections between cities to highlight areas that are well-connected by car, by public transport, or by both, based on specific time thresholds. This helps in understanding the underlying spatial structure of the labor market.
+
+```{r fig.height=16, fig.width=12}
+library(tidyr)
+library(purrr)
+library(ggpattern)
+library(sf)
+library(data.table)
+
+# --- Convert coordinate pairs to sf LINESTRING objects for plotting ---
+# For commuting connections:
+d_test_commute <- distances_relevant %>% group_by(city...1) %>% mutate(rank_e=rank(dist)) %>% filter(driving_nov > 30 & commuting_nov < 50) 
+d_mat1_c <- as.data.frame(cbind(unlist(map(d_test_commute$geometry...2,1)),unlist(map(d_test_commute$geometry...2,2))))
+d_mat2_c <- as.data.frame(cbind(unlist(map(d_test_commute$geometry...5,1)),unlist(map(d_test_commute$geometry...5,2))))
+d_mat1_c$num = rep(1, nrow(d_mat1_c))
+d_mat2_c$num = rep(2, nrow(d_mat2_c))
+d_mat1_c$id=1:nrow(d_mat1_c)
+d_mat2_c$id=1:nrow(d_mat2_c)
+d_mat_c <- rbind(d_mat1_c,d_mat2_c)
+
+setorder(d_mat_c,id,num)
+connection_commute <- sfheaders::sf_linestring(
+  obj = d_mat_c,   x = "V1", y = "V2"  , linestring_id = "id"  , keep = TRUE)
+st_crs(connection_commute) <- "WGS84" 
+
+# For driving connections:
+d_test_drive <- distances_relevant %>% group_by(city...1) %>% mutate(rank_e=rank(dist)) %>% filter(driving_nov < 30 & commuting_nov > 50) 
+d_mat1_d <- as.data.frame(cbind(unlist(map(d_test_drive$geometry...2,1)),unlist(map(d_test_drive$geometry...2,2))))
+d_mat2_d <- as.data.frame(cbind(unlist(map(d_test_drive$geometry...5,1)),unlist(map(d_test_drive$geometry...5,2))))
+d_mat1_d$num = rep(1, nrow(d_mat1_d))
+d_mat2_d$num = rep(2, nrow(d_mat2_d))
+d_mat1_d$id=1:nrow(d_mat1_d)
+d_mat2_d$id=1:nrow(d_mat2_d)
+d_mat_d <- rbind(d_mat1_d,d_mat2_d)
+
+
+setorder(d_mat_d,id,num)
+connection_drive <- sfheaders::sf_linestring(
+  obj = d_mat_d,   x = "V1", y = "V2"  , linestring_id = "id"  , keep = TRUE)
+st_crs(connection_drive) <- "WGS84" 
+
+# For connections good by both modes:
+d_test <- distances_relevant %>% group_by(city...1) %>% mutate(rank_e=rank(dist)) %>% filter(driving_nov < 30 & commuting_nov < 60) 
+d_mat1 <- as.data.frame(cbind(unlist(map(d_test$geometry...2,1)),unlist(map(d_test$geometry...2,2))))
+d_mat2 <- as.data.frame(cbind(unlist(map(d_test$geometry...5,1)),unlist(map(d_test$geometry...5,2))))
+d_mat1$num = rep(1, nrow(d_mat1))
+d_mat2$num = rep(2, nrow(d_mat2))
+d_mat1$id=1:nrow(d_mat1)
+d_mat2$id=1:nrow(d_mat2)
+d_mat <- rbind(d_mat1,d_mat2)
+
+setorder(d_mat,id,num)
+
+# Combine the three line datasets for plotting.
+
+connection_sf <- sfheaders::sf_linestring(
+  obj = d_mat,   x = "V1", y = "V2"  , linestring_id = "id"  , keep = TRUE)
+
+st_crs(connection_sf) <- "WGS84" 
+
+library(ggpattern)
+library(gridpattern)
+library(ggplot2)
+library("magick")
+rm(list=c("d_mat1","d_mat2","d_test","d_mat", "examples"))
+
+
+connection_commute$mode = "b) Public Transport < 60 min, Driving > 30 min"
+connection_drive$mode = "a) Public Transport > 60 min, Driving < 30 min"
+connection_sf$mode = "c) Public Transport < 60 min, Driving < 30 min"
+#connection_commute$mode = "b) ÖPNV < 45 min, KfZ > 30 min"
+#connection_drive$mode = "a) ÖPNV > 45 min, KfZ < 30 min"
+#connection_sf$mode = "c) ÖPNV < 45 min, KfZ < 30 min"
+connection_graphics <- rbind(connection_drive,connection_commute,connection_sf)
+
+custom_disc_color_10 <- c(
+  "#0d6971",  # Mix of Blue and Green
+  "#ffe4b5",   # Light Orange
+  "#4b0082",  # Darker Purple
+  "#1A2F80",
+  "#0056a0",  # Darker Blue
+  "#35005f",  # Mix of Violet and Blue
+  "#1e7d32",  # Lighter Green
+  "#957a48",  # Mix of Green and Red
+  "#ec7063",  # Red
+  "#fda06b"  # Orange
+)
+
+# --- Create the final map ---
+map_cities <- ggplot() +
+  geom_sf(data = districts, aes(fill = parent_DWH), alpha = 0.2) +  
+  geom_sf(data = connection_graphics, aes(color = mode), linewidth = 1) +
+  geom_sf(data = final, color = "#003268", size = 2, shape = 20) + 
+  labs(color = "Travelling times by Transport Mode") +
+  guides(fill = FALSE) + 
+  scale_color_manual(values = c("#AA4455", "#E69F00", "#96c11f")) + 
+  theme_bw() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 11, face="bold"),
+    legend.key.size = unit(0.5, "cm"),
+    legend.box = "horizontal",
+    legend.box.just = "center",
+    legend.spacing.x = unit(0.5, "cm"),
+    axis.title = element_text(size = 10, face="bold"),  # axis titles (x/y)
+    axis.text = element_text(size = 10)    
+  ) +
+  scale_fill_gradientn(colors = custom_colors(100), na.value="#d4d4d4") + 
+  guides(
+    color = guide_legend(ncol = 1, title.position="top")  # Ensure single column for legend items
+  ) + 
+  scale_fill_manual(values = custom_disc_color_10)
+
+map_cities 
+
+ggsave(
+  filename = "./Outputs/Figures/map_cities.png",   # or .tiff / .pdf
+  plot     = map_cities,
+  width    = 16,                  # width in cm
+  height   = 25,
+  units    = "cm",
+  dpi      = 900
+)
+
+```
+
+
+# Profession Based analysis
+
+This is the start of the core analysis. The script now filters the main data frame to include only the data for the profession selected in the configuration chunk at the beginning of the file.
+
+```{r}
+
+#Create small visualisation of Profession based differences in share of matched positions.
+library(ggplot2)
+borders<-profession %>% mutate(share=NewContracts/(NewContracts+OpenPositions))
+ggplot(borders) + geom_freqpoly(aes(x=share, color=Profession)) + theme_light() +
+  scale_colour_manual(values = custom_disc_color)
+
+
+# Filter the data to the selected profession.
+profession <- profession[profession$Profession == profession_selected,]
+
+```
+#Define Regression Models and Variables
+
+This section prepares the data and formulas for the regression analysis. It involves log-transforming variables as is standard for Cobb-Douglas matching functions and defining a set of model formulas to test different specifications.
+
+## Add regional identifieers
+```{r}
+# Add district ID and number of representative cities to the analysis data frame.
+profession <- merge(profession, districts[,2], by="ID")
+profession <- merge(profession,final %>% group_by(ABDistrict) %>% summarise(numCity=n()),by.x="region",by.y="ABDistrict") 
+```
+
+## Define models
+```{r}
+library(spatialreg)
+library(spdep)
+library(jtools)
+library(sf)
+#profession$target = pmin(profession$AllApplicants,profession$OpenPositions, na.rm = TRUE)
+
+# Ensure no zero new contracts, as this will be log-transformed.
+profession <- profession[profession$NewContracts!=0,]
+profession <- profession
+
+# Log-transform variables .
+
+profession$M <- log(profession$NewContracts)
+profession$U <- log((profession$NewContracts + profession$AllApplicants))
+profession$V <- log((profession$NewContracts + profession$OpenPositions))
+
+profession$shareUNI <- log(profession$shareUNI)
+profession$shareVET <- log(profession$shareVET)
+
+profession$unemp25 <- log(profession$unemp25)
+profession$bigCo<- log(profession$bigCo)
+profession$medCo<- log(profession$medCo)
+profession$mbCo<- log(profession$mbCo)
+profession$income <- log(profession$income)
+#profession$cars <- log(profession$cars)
+profession$highSE <- log(profession$highSE)
+profession$cons  <- log(profession$cons)
+profession$gdp <- log(profession$gdp)
+
+profession$lowSE <- log(profession$lowSE)
+profession$medSE <- log(profession$medSE)
+
+
+profession$area <- as.numeric(st_area(st_sf((profession))))
+
+# Define the target variable.
+target = "M"
+
+# --- Define the different model formulas to be tested ---
+# 1. Base Model: Standard matching function with only U and V.
+formula_base <- as.formula(paste0(target, "  ~ U + V "))
+# 2. Agglomeration Model: Base model plus a generic 'Agglomeration' term.
+formula_agg <- as.formula(paste0(target, "   ~ U + V + Agglomeration"))
+# 3. Controls Model: Base model plus regional control variables.
+formula_ctrl <- as.formula(paste0(target, "   ~ U + V + unemp25 + cons + highSE +  medSE  "))
+# 4. Full Model: Base model with both controls and a generic 'Agglomeration' term.
+formula_ctrl_agg <- as.formula(paste0(target, "   ~ U + V + unemp25 + cons + highSE + medSE  + Agglomeration"))
+```
+
+## Compute first agglomeraion Measures
+This section tests a series of simple, attribute-based measures of agglomeration. Each measure is used as the Agglomeration variable in the regression formulas defined above, and its performance is evaluated.
+
+```{r}
+
+model_base <- lm(formula_base,  profession, na.action = na.exclude)
+model_controls<- lm(formula_ctrl ,  profession, na.action = na.exclude)
+
+# West East Difference
+profession$Regionname <- "West"
+profession$Regionname[as.numeric(profession$parentID)>899] <- "Ost"
+profession$AgglomerationEast = (as.numeric(profession$Regionname == "Ost"))
+profession$Agglomeration <- profession$AgglomerationEast
+model_east_west <- lm(formula_agg,  profession, na.action = na.exclude)
+model_ctrl_east_west <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+
+# Single City 
+profession$AgglomerationSingleCity <- (as.numeric((profession$numCity == 1) & (profession$ID != 214) & (profession$ID != 367)  & (profession$ID != 391) ))
+profession$Agglomeration <- profession$AgglomerationSingleCity
+model_single_city_region <-lm(formula_agg,  profession, na.action = na.exclude)
+model_ctrl_single_city_region <-lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+
+# Share of Biggest City
+final <- final %>% group_by(ABDistrict) %>% mutate(sample=sum(maxPopulation), numCity=n(), shareCity=max(maxPopulation)/max(all))
+profession_agg_share<- unique(merge(profession,final, by.x ="region", by.y ="ABDistrict", all.x=TRUE)[,c("region","shareCity")])
+profession<-merge(profession,profession_agg_share, by="region")
+
+profession$AgglomerationShareCity <- log(profession$shareCity)
+profession$Agglomeration <- profession$AgglomerationShareCity
+model_share_cities <-lm(formula_agg, profession, na.action = na.exclude)
+model_ctrl_share_cities <-lm(formula_ctrl_agg, profession, na.action = na.exclude)
+
+# Cohort Size
+profession$AgglomerationCohort <- log(profession$cohort)
+profession$Agglomeration <- profession$AgglomerationCohort
+model_cohort <-lm(formula_agg, profession, na.action= na.exclude)
+model_ctrl_cohort <-lm(formula_ctrl_agg, profession, na.action= na.exclude)
+
+#Population
+profession$AgglomerationPop <- log(profession$inhabitant)
+profession$Agglomeration <- profession$AgglomerationPop
+model_pop <-lm(formula_agg, profession, na.action= na.exclude)
+model_ctrl_pop <-lm(formula_ctrl_agg,profession, na.action= na.exclude)
+
+#Urban Permeation
+profession$AgglomerationUrbanPermeation<- log(profession$urban_permeation)
+profession$Agglomeration <- profession$AgglomerationUrbanPermeation
+model_urban_permeation<-lm(formula_agg,  profession, na.action = na.exclude)
+model_ctrl_urban_permeation<-lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+
+#Urban NumRams
+profession$AgglomerationNumRams <- log(profession$num_ram)
+profession$Agglomeration <- profession$AgglomerationNumRams
+model_num_ram <-lm(formula_agg,  profession, na.action = na.exclude)
+model_ctrl_num_ram <-lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+
+#Density
+profession$AgglomerationDensity <- log(profession$density)
+profession$Agglomeration <- (profession$AgglomerationDensity)
+model_den  <- lm(formula_agg,  profession, na.action = na.exclude)
+model_ctrl_den  <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+
+#Traffic Infrastructure
+profession$AgglomerationTraffic <- log(profession$share_traffic)
+profession$Agglomeration <- (profession$AgglomerationTraffic)
+model_traffic <- lm(formula_agg,  profession, na.action = na.exclude)
+model_ctrl_traffic <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+
+
+export_summs(model_base, model_east_west, model_single_city_region, model_share_cities, model_cohort, model_pop, model_urban_permeation, model_num_ram, model_den, model_traffic, model.names = c("Base", "EW", "SC", "NC", "CO", "POP", "UP", "RAM", "DEN", "TI"), stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1) ,   number_format = "%.3f", statistics=c("logLik","AIC","BIC","N. obs." = "nobs"))
+
+export_summs(model_base, model_controls, model_ctrl_east_west, model_ctrl_single_city_region, model_ctrl_share_cities, model_ctrl_cohort, model_ctrl_pop, model_ctrl_urban_permeation, model_ctrl_num_ram, model_ctrl_den, model_ctrl_traffic, model.names = c("Base", "Controls", "EW", "SC", "NC", "CO", "POP", "UP", "RAM", "DEN", "TI"), stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1) ,   number_format = "%.3f", statistics=c("logLik","AIC","BIC","N. obs." = "nobs"))
+
+
+```
+
+
+## Calculate and Test Spatial Agglomeration Measures
+This section moves beyond simple attributes to calculate agglomeration based on spatial proximity (distance, driving time, public transport time). A loop is used to find the "optimal" spatial radius for each measure by iterating through different thresholds and selecting the one that maximizes the model's log-likelihood.
+
+```{r}
+# Merge distance data with population data for both origin and destination cities.
+distances_relevant_pop <- merge(distances_relevant,final, by.x="city...1",by.y="city")
+distances_relevant_pop <- merge(distances_relevant_pop,final,by.x="city...4",by.y="city")
+distances_relevant_pop$dist<- distances_relevant_pop$dist/1000
+
+```
+
+### Distances (city and population based)
+This chunk tests agglomeration based on geographic distance, both with and without population weighting. I will not re-comment later chunkgs with the same structure.
+
+```{r warning=FALSE}
+
+#### Distances with population weighted
+best_itt_dist_pop <- 0
+best_val_dist_pop <- 0
+
+profession$Agglomeration <-0
+model_dist_pop <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_dist_pop <- NULL
+best_model_ctrl_dist_pop <- NULL
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationDistPop <- 0
+distances_quantiles <- distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% select(dist) %>% filter(dist !=0)
+
+# Loop through distance quantiles to find the best threshold
+for(test in quantile(distances_quantiles$dist, probs = seq(0,1,0.1))[2:10])
+{
+# Calculate agglomeration score based on population reachable within the 'test' distance. Calculate for every District, all connections that are below the test threshold, and caculate for each city in this connection list, how many people can be reaches.
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(dist <= test) %>% group_by(city...1) %>% summarise(target_share=sum(maxPopulation.y)/max(sample.y), self_pop = mean(maxPopulation.x), sample=max(sample.x), district=max(ABDistrict.x), .groups="keep") %>% group_by(district) %>% summarise(Agglomeration=mean(target_share*sample), .groups="keep")
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration/1000 ) 
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="district", all.x=TRUE)
+model_dist_pop<- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+print(logLik(model_dist_pop))
+
+# Run model and check if it's the best so far.
+if(logLik(model_dist_pop) > best_val_dist_pop)
+{ best_val_dist_pop <- logLik(model_dist_pop)
+best_itt_dist_pop <- test
+best_model_dist_pop <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_dist_pop <- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+profession$AgglomerationDistPop <- profession_new$Agglomeration
+}
+}
+
+best_itt_dist <- 0
+best_val_dist <- 0
+
+#### Distances without population weighted
+
+profession$Agglomeration <-0
+model_dist <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_dist <- NULL
+best_model_ctrl_dist <- NULL
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationDist <- 0
+distances_quantiles <- distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% select(dist) %>% filter(dist !=0)
+
+for(test in quantile(distances_quantiles$dist, probs = seq(0,1,0.1))[2:10])
+{
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(dist <= test) %>% group_by(ABDistrict...3) %>%  summarise(Agglomeration=n()/(max(numCity.x)*max(numCity.x)), .groups="keep") 
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration )
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="ABDistrict...3", all.x=TRUE)
+model_dist<- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+print(logLik(model_dist))
+
+if(logLik(model_dist) > best_val_dist)
+{ best_val_dist <- logLik(model_dist)
+best_itt_dist <- test
+best_model_dist <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_dist <- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+profession$AgglomerationDist <- profession_new$Agglomeration
+}
+}
+
+```
+
+
+### Drivintg  (city and population based)
+This chunk repeats the optimization process using driving time instead of geographic distance.
+```{r warning=FALSE}
+
+#### Distances with population weighted
+best_itt_driving_pop <- 0
+best_val_driving_pop <- 0
+
+profession$Agglomeration <-0
+model_driving_pop <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_driving_pop <- NULL
+best_model_ctrl_driving_pop <- NULL
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationDrivingPop <- 0
+driving_quantiles <- distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% select(driving) %>% filter(driving !=0)
+
+for(test in quantile(driving_quantiles$driving, probs = seq(0,1,0.1))[2:10])
+{
+test <- quantile(driving_quantiles$driving, probs = seq(0,1,0.1))[4]
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(driving <= test) %>% group_by(city...1) %>% summarise(target_share=sum(maxPopulation.y)/max(sample.y), self_pop = mean(maxPopulation.x), sample=max(sample.x), district=max(ABDistrict.x), .groups="keep") %>% group_by(district) %>% summarise(Agglomeration=mean(target_share*sample), .groups="keep") 
+
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration /1000) 
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="district", all.x=TRUE)
+model_driving_pop<- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+print(logLik(model_driving_pop))
+
+if(logLik(model_driving_pop) > best_val_driving_pop)
+{ best_val_driving_pop <- logLik(model_driving_pop)
+best_itt_driving_pop <- test
+best_model_driving_pop <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_driving_pop <- lm(formula_ctrl_agg,  profession_new, na.action = na.exclude)
+
+profession$AgglomerationDrivingPop <- profession_new$Agglomeration
+}
+}
+
+best_itt_driving <- 0
+best_val_driving <- 0
+
+#### Distances without population weighted
+
+profession$Agglomeration <-0
+model_driving <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_driving <- NULL
+best_model_ctrl_driving <- NULL
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationDriving <- 0
+driving_quantiles <- distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% select(driving) %>% filter(driving !=0)
+
+for(test in quantile(driving_quantiles$driving, probs = seq(0,1,0.1))[2:10])
+{
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(driving <= test) %>% group_by(ABDistrict...3) %>%  summarise(Agglomeration=n()/(max(numCity.x)*max(numCity.x)), .groups="keep") 
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration )
+
+
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="ABDistrict...3", all.x=TRUE)
+model_driving<- lm(formula_ctrl_agg,  profession_new, na.action=na.exclude)
+print(logLik(model_driving))
+
+if(logLik(model_driving) > best_val_driving)
+{ best_val_driving <- logLik(model_driving)
+best_itt_driving <- test
+best_model_driving <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_driving <- lm(formula_ctrl_agg,  profession_new, na.action=na.exclude)
+
+profession$AgglomerationDriving <- profession_new$Agglomeration
+}
+}
+```
+### Public transport  (city and population based)
+This chunk repeats the optimization process using public transport time.
+```{r}
+profession$AgglomerationPublicPop49 <- 0 
+
+#### Distances with population weighted
+best_itt_public_pop <- 0
+best_val_public_pop <- 0
+
+profession$Agglomeration <-0
+model_public_pop <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_public_pop <- NULL
+best_model_ctrl_public_pop <- NULL
+
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationPublicPop <- 0
+public_quantiles <- distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% select(public) %>% filter(public !=0)
+
+for(test in quantile(public_quantiles$public, probs = seq(0,1,0.1))[2:10])
+{
+
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(public <= test) %>% group_by(city...1) %>% summarise(target_share=sum(maxPopulation.y)/max(sample.y), self_pop = mean(maxPopulation.x), sample=max(sample.x), district=max(ABDistrict.x), .groups="keep") %>% group_by(district) %>% summarise(Agglomeration=mean(target_share*sample), .groups="keep") 
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration /1000) 
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="district", all.x=TRUE)
+model_public_pop<- lm(formula_ctrl_agg,  profession_new, na.action=na.exclude)
+print(logLik(model_public_pop))
+
+# Saving the best-ffiting agglomeratino, also for other professison
+if(test == quantile(public_quantiles$public, probs = seq(0,1,0.1))[5])
+{
+  profession$AgglomerationPublicPop49 <- profession_new$Agglomeration
+}
+
+
+if(logLik(model_public_pop) > best_val_public_pop)
+{ best_val_public_pop <- logLik(model_public_pop)
+best_itt_public_pop <- test
+best_model_public_pop <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_public_pop <- lm(formula_ctrl_agg,  profession_new, na.action=na.exclude)
+profession$AgglomerationPublicPop <- profession_new$Agglomeration
+}
+}
+
+best_itt_public <- 0
+best_val_public <- 0
+
+#### Distances without population weighted
+
+profession$Agglomeration <-0
+model_public <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_public <- NULL
+best_model_ctrl_public <- NULL
+
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationPublic <- 0
+public_quantiles <- distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% select(public) %>% filter(public !=0)
+
+for(test in quantile(public_quantiles$public, probs = seq(0,1,0.1))[2:10])
+{
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(public <= test) %>% group_by(ABDistrict...3) %>%  summarise(Agglomeration=n()/(max(numCity.x)*max(numCity.x)), .groups="keep") 
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration ) 
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="ABDistrict...3", all.x=TRUE)
+model_public<- lm(formula_ctrl_agg,  profession_new, na.action=na.exclude)
+print(logLik(model_public))
+
+if(logLik(model_public) > best_val_public)
+{ best_val_public <- logLik(model_public)
+best_itt_public <- test
+best_model_public <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_public <- lm(formula_ctrl_agg,  profession_new, na.action=na.exclude)
+
+profession$AgglomerationPublic <- profession_new$Agglomeration
+}
+}
+```
+
+
+### K-Nearest Neighbors (KNN) Measures
+
+This chunk calculates agglomeration based on the K-Nearest Neighbors, providing an alternative to distance/time thresholds. This section was not included in the final paper.
+
+```{r}
+
+best_itt_knn_pop <- 0
+best_val_knn_pop <- 0
+
+profession$Agglomeration <-0
+model_knn_pop <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_knn_pop <- NULL
+best_model_knn_ctrl_pop <- NULL
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationKnnPop <- 0
+
+for(test in 1:10)
+{
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(rank <= test) %>% group_by(city...1) %>% summarise(target_share=sum(maxPopulation.y)/max(sample.y), self_pop = mean(maxPopulation.x), sample=max(sample.x), district=max(ABDistrict.x), .groups="keep") %>% group_by(district) %>% summarise(Agglomeration=mean(target_share*sample), .groups="keep") 
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration /1000) 
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="district", all.x=TRUE)
+model_knn_pop<- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+print(logLik(model_knn_pop))
+
+if(logLik(model_knn_pop) > best_val_knn_pop)
+{ best_val_knn_pop <- logLik(model_knn_pop)
+best_itt_knn_pop <- test
+best_model_knn_pop <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_knn_pop <- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+
+profession$AgglomerationKnnPop <- profession_new$Agglomeration
+}
+}
+
+best_itt_knn <- 0
+best_val_knn <- 0
+
+#### Distances without population weighted
+
+profession$Agglomeration <-0
+model_knn <- lm(formula_ctrl_agg,  profession, na.action = na.exclude)
+best_model_knn <- NULL
+best_model_ctrl_knn <- NULL
+
+profession <- profession %>% select(-Agglomeration)
+profession$AgglomerationKnn <- 0
+
+
+for(test in 1:10)
+{
+distances_relevant_test <-  distances_relevant_pop %>%  filter(ABDistrict...3 == ABDistrict...6) %>% filter(rank <= test) %>% group_by(ABDistrict...3) %>%  summarise(Agglomeration=n()/(max(numCity.x)*max(numCity.x)), .groups="keep") 
+
+distances_relevant_test$Agglomeration <- log(distances_relevant_test$Agglomeration ) 
+
+profession_new <- merge(profession,distances_relevant_test[,1:2], by.x ="region", by.y ="ABDistrict...3", all.x=TRUE)
+model_knn<- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+print(logLik(model_knn))
+
+if(logLik(model_knn) > best_val_knn)
+{ best_val_knn <- logLik(model_knn)
+best_itt_knn <- test
+best_model_knn <- lm(formula_agg, profession_new, na.action=na.exclude)
+best_model_ctrl_knn <- lm(formula_ctrl_agg, profession_new, na.action=na.exclude)
+profession$AgglomerationKnn <- profession_new$Agglomeration
+}
+}
+```
+
+# Generate Summary Tables and Final Outputs
+This final part of the analysis section brings together all the results, creating comprehensive summary tables, visualizing key findings, and saving the final workspace.
+
+```{r}
+
+library(huxtable)
+library(formula.tools)
+
+model_names <- c("Base", "EA-WE", "CITY", "CITY-SHARE", "COHO", "POP", "URB",  "DEN", "TI","DIST","POP-DIST","DRIVE","POP-DRIVE","PUBLIC","POP-PUB","KNN","KNNP")
+
+model_names_ctrl  <- c("Base", "Controls", "EA-WE", "CITY", "CITY-SHARE", "COHO", "POP", "URB", "RAM", "DEN", "TI","DIST","POP-DIST","DRIVE","POP-DRIVE","PUBLIC","POP-PUB","KNN","KNNP")
+
+table <- export_summs(model_base, model_east_west, model_single_city_region, model_share_cities, model_cohort, model_pop, model_urban_permeation, model_num_ram, model_den, model_traffic, best_model_dist, best_model_dist_pop, best_model_driving, best_model_driving_pop, best_model_public, best_model_public_pop, best_model_knn, best_model_knn_pop, model.names = model_names, stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1) ,   number_format = "%.3f", statistics=c("logLik","N. obs." = "nobs"))
+
+table_ctrl <- export_summs(model_base, model_controls, model_ctrl_east_west, model_ctrl_single_city_region, model_ctrl_share_cities, model_ctrl_cohort, model_ctrl_pop, model_ctrl_urban_permeation, model_ctrl_num_ram, model_ctrl_den, model_ctrl_traffic,best_model_ctrl_dist, best_model_ctrl_dist_pop, best_model_ctrl_driving, best_model_ctrl_driving_pop, best_model_ctrl_public, best_model_ctrl_public_pop, best_model_ctrl_knn, best_model_ctrl_knn_pop,
+ model.names = model_names_ctrl , stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1) ,   number_format = "%.3f", statistics=c("logLik","N. obs." = "nobs"))
+
+# Updated model names with the necessary variables in the specified order
+output_model_names <- c("Base", "CITY", "CITY-SHARE", "EA-WE", "URB", "DEN", "COHO", "POP", "POP-DIST", "POP-DRIVE", "POP-PUBLIC")
+
+output_model_names_ctrl  <- c("Base", "Controls", "CITY", "CITY-SHARE", "EA-WE", "URB", "DEN", "COHO", "POP", "POP-DIST", "POP-DRIVE", "POP-PUBLIC")
+
+# Reordered and sub-selected models
+output_table <- export_summs(
+  model_base,
+  model_single_city_region, 
+  model_share_cities, 
+  model_east_west, 
+  model_urban_permeation, 
+  model_den, 
+  model_cohort, 
+  model_pop, 
+  best_model_dist_pop, 
+  best_model_driving_pop, 
+  best_model_public_pop, 
+  model.names = output_model_names, 
+  stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1), 
+  number_format = "%.3f", 
+  statistics = c("logLik", "N. obs." = "nobs")
+)
+
+output_table_ctrl <- export_summs(
+  model_base,
+  model_controls,
+  model_ctrl_single_city_region, 
+  model_ctrl_share_cities, 
+  model_ctrl_east_west, 
+  model_ctrl_urban_permeation, 
+  model_ctrl_den, 
+  model_ctrl_cohort, 
+  model_ctrl_pop, 
+  best_model_ctrl_dist_pop, 
+  best_model_ctrl_driving_pop, 
+  best_model_ctrl_public_pop, 
+  model.names = output_model_names_ctrl, 
+  stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1), 
+  number_format = "%.3f", 
+  statistics = c( "logLik", "AIC","BIC", "N. obs." = "nobs")
+)
+
+
+# Saving the HTML outputs
+output_table %>% quick_html(file = paste0("./Outputs/Regressions/", profession_selected, target, "Agg.html"))
+output_table_ctrl %>% quick_html(file = paste0("./Outputs/Regressions/", profession_selected, target, "ControlAgg.html"))
+
+
+model_names_new <- c("BASE", "COHO", "POP-DRIVE", "POP-PUBLIC", "CONTROL", "COHO", "POP-DRIVE", "POP-PUBLIC")
+
+# Sub-selected models in the specified order
+table_new <- export_summs(
+  model_base, 
+  model_cohort,   
+  best_model_driving_pop,
+  best_model_public_pop, 
+  model_controls, 
+  model_ctrl_cohort, 
+  best_model_ctrl_driving_pop,
+  best_model_ctrl_public_pop, 
+  number_format = "%.3f", 
+  model.names = model_names_new, 
+  stars = c(`***` = 0.001, `**` = 0.01, `*` = 0.05,  `^` = 0.1), 
+  coefs = names(best_model_ctrl_public_pop$coefficients),  # Agglomeration placed last
+  statistics = c("logLik", "N. obs." = "nobs") # Adjusted R-squared removed
+) %>%
+    set_font_size(10) %>% 
+    set_tb_padding(1) %>% 
+    set_italic(final(1), 1)
+
+
+# Saving the HTML output
+table_new %>% quick_html(file = paste0("./Outputs/Regressions/", profession_selected, target, "SelectedModels.html"))
+```
+
+## Print local efficiency based on agglomeration
+This chunk uses the coefficients from the best-performing model (best_model_ctrl_public_pop) to calculate a "local matching efficiency" score for each district. This score, which represents the constant term of the matching function adjusted for local characteristics, is then visualized on a map.
+
+```{r fig.height=16, fig.width=12}
+
+estimate_vector<- best_model_ctrl_public_pop$coefficients[-c(2,3,9,10,11)] 
+estimate_values <- as.matrix(cbind("(Intercept)"=1, st_drop_geometry(profession_new[,names(estimate_vector[-1])])))
+profession_new$Efficiency <- exp(estimate_values %*% estimate_vector)
+
+map_efficiency <- ggplot() + 
+  geom_sf(data=st_as_sf(profession_new), aes(fill = Efficiency))+
+  
+  theme(legend.text.align = 1) +
+  labs(fill = "Efficiency") +
+  guides(
+    fill = guide_colorbar(direction = "horizontal", title.position="top", barwidth = 20,  # Adjust this value to change the width of the colorbar
+      barheight = 1  ), 
+# Adjust rows for the fill legend
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 18, face="bold"),
+    legend.box = "horizontal",
+    legend.box.just = "center",
+    legend.spacing.x = unit(0.5, "cm") 
+  )
+  #labs(shape = "Bevölkerung ", fill = "Defizit an Auszubildenden") +
+ # scale_fill_gradient2(high = "#96c11f", low = "#003268", mid = "white") 
+
+map_efficiency  + scale_fill_gradientn(colors = custom_colors(100), na.value="#e4e4e4")
+```
+
+
+## Corrleation between aggloemration measures
+This plot shows the correlation between all the different agglomeration measures that were calculated. It helps to understand which concepts of agglomeration are similar and which are distinct. The matrix is sorted by average correlation to make it easier to interpret.
+
+```{r}
+# Step 2: Select relevant columns
+
+model_names
+agglo_cols <- grep("Agglomeration", names(profession), value = TRUE)
+
+
+agglo_cols <- agglo_cols[c(1:6,8:9,11,10,13,12,15,14,17,16)]
+
+agglo_data <- profession[, agglo_cols]
+
+#1] "Base"      "EA-WE"     "CITY"      "CITY-N"    "COHO"      "POP"       "URB"       "DEN"       "TI"       
+#[10] "DIST"      "POP-DIST"  "DRIVE"     "POP-DRIVE" "PUBLIC"    "POP-PUB"   "KNN"       "KNNP"   
+
+model_names 
+colnames(agglo_data)<-model_names[-1]
+
+# Step 3: Create a correlation matrix
+cor_matrix <- cor(agglo_data, use = "complete.obs")
+row.names(cor_matrix) <- model_names[-1]
+colnames(cor_matrix) <- model_names[-1]
+avg_cor <- rowMeans(abs(cor_matrix))
+
+# Step 5: Sort the variables based on the average correlation
+sorted_indices <- order(avg_cor, decreasing = TRUE)
+sorted_cor_matrix <- cor_matrix[sorted_indices, sorted_indices]
+
+library(corrplot)
+
+#custom_names <- c("CustomName1", "CustomName2", "CustomName3")  # Update with your custom names
+#custom_names_sorted <- custom_names[sorted_indices]
+#names(sorted_cor_matrix) <- custom_names_sorted
+#colnames(sorted_cor_matrix) <- custom_names_sorted
+#rownames(sorted_cor_matrix) <- custom_names_sorted
+
+# Step 6: Create the corplot
+corrplot(sorted_cor_matrix, method = "circle", type = "full", tl.col = "black", tl.srt = 45, col=rev(custom_colors(100)))
+
+
+```
+
+## Summary Statistics of Agglomeration Measures
+
+This chunk creates a detailed descriptive statistics table for the main agglomeration measures, including short descriptions of what each measure represents.
+```{r}
+library(dplyr)
+library(huxtable)
+
+# Define a function to calculate the required statistics for a column
+calculate_stats <- function(x, name) {
+  stats <- data.frame(
+    Variable = name,
+    Min = min(x, na.rm = TRUE),
+    Max = max(x, na.rm = TRUE),
+    Mean = mean(x, na.rm = TRUE),
+    SD = sd(x, na.rm = TRUE),
+    Q1 = quantile(x, 0.25, na.rm = TRUE),
+    Median = quantile(x, 0.5, na.rm = TRUE),
+    Q3 = quantile(x, 0.75, na.rm = TRUE)
+  )
+  return(stats)
+}
+
+agglo_data <- exp(agglo_data)
+agglo_data$CITY <- log(agglo_data$CITY)
+
+# Calculate statistics for each column and bind the results into a single data frame
+agglo_stats <- bind_rows(lapply(names(agglo_data), function(name) {
+  calculate_stats(agglo_data[[name]], name)
+}))
+
+selected_values <- c("CITY", "CITY-SHARE", "URB", "DEN", 
+                     "COHO", "POP", "POP-DIST", "POP-DRIVE", "POP-PUB")
+# Filter and arrange
+agglo_stats <- agglo_stats %>%
+  filter(Variable %in% selected_values) %>%
+  arrange(factor(Variable, levels = selected_values))
+
+
+agglo_stats$Name <-  c("Single City Region",
+"Frequency of Cities",
+"Urban Permeation",
+"Population Density",
+"Cohort Size",
+"Population",
+"Population Distance Weighted",
+"Population Driving Weighted",
+"Population Public Transport Weighted")
+
+
+agglo_stats$Description <- c(
+"Indicator for being a Single City Labour Market",
+"Share of population that are covered by the biggest city within a region",
+"Urban Permeation (Jeager et al, 2010). It measures the intensity and spread of buildings in the landscape simultenously.",
+"Population per area covered (in 1000 / km²)",
+"Number of Adolescents (in 1000) between 16 and 22 years",
+"Population (in 1000) of a certain region.",
+" Population (in 1000) that can be reached by an average citizen within 22.3 km distance.",
+" Population (in 1000) that can be reached by an average citizen within 43 minutes of car driving",
+" Population (in 1000) that can be reached by an average citizen within 49.3 minutes of public transport.")
+
+# Sort the statistics by the Mean column
+#agglo_stats_sorted <- agglo_stats %>% arrange(Mean)
+
+agglo_stats <- agglo_stats[c(1,9,10,2:8)]
+
+# Create the huxtable
+ht <- as_hux(agglo_stats)
+
+
+ht <- ht %>%
+  set_all_borders(value = 1) %>%
+  set_all_border_colors(value = "black") %>%
+  set_all_border_styles(value = "solid") %>%
+# set_background_color(even = TRUE, everywhere = TRUE, value = "lightgray") %>%
+  set_background_color(row = 1, value = "lightgray") %>%
+  set_background_color(col = 1, value = "lightgray") %>%
+  set_header_rows(1, TRUE) %>%
+  set_header_cols(1, TRUE) %>%
+  set_wrap(col = 1, value = FALSE)
+
+# Add light gray lines between rows and columns
+# Display the huxtable as HTML
+ht%>% quick_html(file=paste0("./Outputs/Regressions/OutputStatisticsAgg.html"))
+
+```
+
+# Final Cleanup and Save Workspace
+
+This final chunk cleans the R environment by removing all intermediate objects, leaving only the essential final data frames and model results. It then saves the clean workspace to a new .Rdata file, named dynamically based on the profession that was analyzed.
+```{r}
+
+all_vars <- ls(envir = .GlobalEnv)
+
+
+# Pattern to match
+pattern <- "best_val"
+matching_vars <- grep(pattern, all_vars, value = TRUE)
+# Create a list of matching variable names and their values
+variable_list <- lapply(matching_vars, function(var_name) {
+  value <- get(var_name, envir = .GlobalEnv)
+  list(name = var_name, value = value)
+})
+# Convert the list to a named list where names are the variable names
+best_value_list <- setNames(variable_list, matching_vars)
+
+pattern <- "model"
+matching_vars <- grep(pattern, all_vars, value = TRUE)
+# Create a list of matching variable names and their valuesbb  
+variable_list <- lapply(matching_vars, function(var_name) {
+  value <- get(var_name, envir = .GlobalEnv)
+  list(name = var_name, value = value)
+})
+# Convert the list to a named list where names are the variable names
+best_list <- setNames(variable_list, matching_vars)
+
+rm(list=ls(pattern="best_val"))
+rm(list=ls(pattern="best_itt"))
+rm(list=ls(pattern="model"))
+
+rm(list=c("all_vars", "borders", "column_names", "connection_commute", "connection_drive", "connection_graphics", "connection_sf", "cormatrix", "d_mat_c", "d_mat_d", "d_mat1_c", "d_mat1_d", "d_mat2_c", "d_mat2_d", "d_test_commute", "d_test_drive", "data_impute", "df_filtered",  "distances_relevant_pop", "distances_relevant_self", "distances_relevant_test", "driving_quantiles", "map_cities", "map_deficit", "matching_vars", "pattern",  "profession_test", "professions", "Professions", "Tabelle_AB", "Tabelle_Kreise", "table", "table_ctrl", "variable_list"))
+
+save.image(file=paste0("./DataBackups/",profession_selected,target,".Rdata"))
+
+```
+
+
